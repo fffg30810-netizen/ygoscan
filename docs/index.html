@@ -47,15 +47,15 @@ button{font:inherit;cursor:pointer}
 #list header .pill{padding:8px 10px}
 #lsum{color:#333;margin:4px 2px 4px;font-size:14px}
 #lhelp{color:#666;margin:0 2px 14px;font-size:13px;line-height:1.35}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.card{background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);position:relative;cursor:pointer}
-.card img{width:100%;aspect-ratio:59/86;object-fit:cover;border-radius:8px;display:block;background:#ddd}
-.card .r{position:absolute;top:14px;left:14px;background:#fff;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.25)}
-.card b{display:block;margin-top:6px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card .p{color:var(--red);font-weight:800;font-size:15px}
-.card small{display:block;color:#666;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:10px}
+.card{background:#fff;border-radius:10px;padding:6px;box-shadow:0 1px 4px rgba(0,0,0,.08);position:relative;cursor:pointer}
+.card img{width:100%;aspect-ratio:59/86;object-fit:cover;border-radius:6px;display:block;background:#ddd}
+.card .r{position:absolute;top:10px;left:10px;background:#fff;border-radius:999px;padding:1px 6px;font-size:10px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.card b{display:block;margin-top:5px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .p{color:var(--red);font-weight:800;font-size:13px}
+.card small{display:block;color:#666;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .empty{grid-column:1/-1;text-align:center;color:#777;padding:40px 10px;line-height:1.5}
-.noimg{width:100%;aspect-ratio:59/86;border-radius:8px;background:#c9b27c;color:#3b2f10;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:700;padding:8px}
+.noimg{width:100%;aspect-ratio:59/86;border-radius:6px;background:#c9b27c;color:#3b2f10;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10px;font-weight:700;padding:6px}
 dialog{border:0;border-radius:16px;padding:0;max-width:92vw;width:420px;color:#111;box-shadow:0 10px 40px rgba(0,0,0,.4)}
 dialog::backdrop{background:rgba(0,0,0,.5)}
 .ph{padding:16px 16px 8px}.ph b{font-size:17px;display:block}.ph small{color:#555;display:block;margin-top:4px;line-height:1.35}
@@ -130,7 +130,8 @@ let track=null, torchOn=false, locked=null, stable=null, stableN=0, missN=0, loo
 
 const status=t=>{$('#status').textContent=t;};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const save=()=>{try{localStorage.setItem('scans',JSON.stringify(scans));}catch(e){toast('Memoria piena: copia il CSV e svuota la lista');}};
+const save=()=>{for(let i=0;i<2;i++){try{localStorage.setItem('scans',JSON.stringify(scans));return;}catch(e){scans.slice(0,Math.ceil(scans.length/2)).forEach(s=>s.thumb='');}}   // memoria piena: via le miniature piu' vecchie
+  toast('Memoria piena: copia il CSV e svuota la lista');};
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),3000);}
 const hx=h=>[parseInt(h.slice(0,8),16)>>>0, parseInt(h.slice(8),16)>>>0];
 function pop(x){x=x-((x>>>1)&0x55555555);x=(x&0x33333333)+((x>>>2)&0x33333333);return(((x+(x>>>4))&0x0F0F0F0F)*0x01010101)>>>24;}
@@ -156,7 +157,13 @@ function phashBits(s){const R=new Float32Array(32*8);
   for(let k=0;k<64;k++){const b=F[k]>med?1:0;if(k<32)hi=(hi<<1)|b;else lo=(lo<<1)|b;}return[hi>>>0,lo>>>0];}
 
 // ---- acquisizione: disegna guida+margine della sorgente nel canvas di lavoro e restituisce i grigi
-function grab(src,g){const mx=g.w*M,my=g.h*M;wctx.fillStyle='#000';wctx.fillRect(0,0,WW,WH);
+let lastSrc=null,lastG=null;                      // ultima sorgente e riquadro usati: servono per la miniatura ad alta risoluzione
+function thumbOf(b){const g=lastG,mx=g.w*M,my=g.h*M,kx=(g.w+2*mx)/WW,ky=(g.h+2*my)/WH,pad=.05;
+  const th=document.createElement('canvas');th.width=180;th.height=262;const c=th.getContext('2d');c.fillStyle='#222';c.fillRect(0,0,180,262);
+  try{c.drawImage(lastSrc,g.x-mx+(b.x0-b.w*pad)*kx,g.y-my+(b.y0-b.h*pad)*ky,b.w*(1+2*pad)*kx,b.h*(1+2*pad)*ky,0,0,180,262);}
+  catch(e){c.drawImage(work,b.x0,b.y0,b.w,b.h,0,0,180,262);}
+  return th.toDataURL('image/jpeg',.7);}
+function grab(src,g){lastSrc=src;lastG=g;const mx=g.w*M,my=g.h*M;wctx.fillStyle='#000';wctx.fillRect(0,0,WW,WH);
   wctx.drawImage(src,g.x-mx,g.y-my,g.w+2*mx,g.h+2*my,0,0,WW,WH);
   const d=wctx.getImageData(0,0,WW,WH).data,gr=new Float32Array(WW*WH);
   for(let i=0,j=0;i<gr.length;i++,j+=4)gr[i]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);
@@ -202,8 +209,8 @@ const card=it=>{const i=BYID.get(it.id);return i===undefined?null:DB.cards[i];};
 const nm=c=>c[7]||c[1], en=c=>c[7]?c[1]:'';               // nome italiano se esiste, altrimenti inglese; en = inglese da mostrare in piccolo
 function priceOf(it){const c=card(it);if(!c)return{eur:0,usd:0,set:null,c:null};const set=c[5][it.si]||null;return{eur:c[3],usd:set?set[2]:c[4],set,c};}
 function addScan(ci,b){const c=DB.cards[ci],sets=c[5];let si=0,best=1e9;sets.forEach((s,i)=>{if(s[2]>0&&s[2]<best){best=s[2];si=i;}});   // default: stampa piu' economica (prudente)
-  let thumb='';if(b){const th=document.createElement('canvas');th.width=60;th.height=88;th.getContext('2d').drawImage(work,b.x0,b.y0,b.w,b.h,0,0,60,88);thumb=th.toDataURL('image/jpeg',.6);}
-  scans.push({id:c[0],si,thumb,t:Date.now()});if(scans.length>300)scans.shift();
+  const thumb=b?thumbOf(b):'';
+  scans.push({id:c[0],si,thumb,t:Date.now()});if(scans.length>200)scans.shift();
   save();render();coin();if(navigator.vibrate&&navigator.userActivation&&navigator.userActivation.hasBeenActive)navigator.vibrate(30);
   if(b){showPrice(scans.length-1);$('#guide').classList.add('lock');if(!DEBUG)status('Riconosciuta: '+nm(c));}else toast('Aggiunta alla lista: '+nm(c));}
 const thumbHtml=(s,name)=>s.thumb?`<img src="${s.thumb}" alt="">`:`<div class="noimg">${esc(name)}</div>`;
