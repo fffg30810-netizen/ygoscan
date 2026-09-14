@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0b0b0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>YGO Scan</title>
+<style>
+:root{--bg:#0b0b0f;--acc:#ff7a1a;--gold:#e9c46a;--red:#e0323c}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:#fff;font:15px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+button{font:inherit;cursor:pointer}
+#scan{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+#guide{position:relative;height:min(56vh,calc(62vw*86/59));aspect-ratio:59/86;border:2px solid rgba(255,255,255,.65);border-radius:12px;
+  box-shadow:0 0 0 100vmax rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;transition:border-color .15s,box-shadow .15s}
+#guide.lock{border-color:var(--gold);box-shadow:0 0 0 100vmax rgba(0,0,0,.28),0 0 28px 4px var(--gold)}
+#guide .hint{position:absolute;bottom:10px;left:6px;right:6px;text-align:center;font-size:13px;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.9);color:#fff}
+#guide.lock .hint{display:none}
+#price{font-size:46px;font-weight:800;text-shadow:0 2px 12px rgba(0,0,0,.85);text-align:center;line-height:1.05;padding:8px}
+#price small{display:block;font-size:13px;font-weight:600;opacity:.95;margin-top:8px;line-height:1.35}
+#top{position:absolute;top:env(safe-area-inset-top,0);left:0;right:0;display:flex;flex-direction:column;gap:6px;padding:10px 12px}
+#top .pills{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+#status{font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.9);font-size:14px}
+.pill{background:rgba(255,255,255,.2);backdrop-filter:blur(8px);border:0;color:#fff;border-radius:999px;padding:8px 12px;font-size:14px;font-weight:600;display:inline-block}
+.pill.on{background:var(--gold);color:#000}
+.pill.dark{background:#e8e8ee;color:#111}
+.pill.acc{background:var(--acc);color:#fff;font-weight:700}
+.pill.big{width:100%;padding:14px;font-size:16px}
+#stack{position:absolute;left:14px;bottom:calc(92px + env(safe-area-inset-bottom,0));display:flex;align-items:flex-end;pointer-events:none}
+#stack img,#stack .noimg{width:54px;height:79px;object-fit:cover;border-radius:6px;border:2px solid #fff;margin-right:-38px;box-shadow:0 2px 8px rgba(0,0,0,.6)}
+#stack .noimg{font-size:8px;padding:3px}
+#stack .n{background:var(--red);color:#fff;border-radius:999px;min-width:22px;height:22px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-left:44px;margin-bottom:64px;padding:0 6px}
+#totals{position:absolute;right:14px;bottom:calc(92px + env(safe-area-inset-bottom,0));text-align:right;text-shadow:0 1px 6px rgba(0,0,0,.85);max-width:58vw}
+#totals small{display:block;font-size:12px;color:#ffb3b8;font-weight:700}
+#totals b{display:block;font-size:30px;font-weight:800;line-height:1.1}
+#totals #tot2{color:#ddd;font-weight:500}
+#organize{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(26px + env(safe-area-inset-bottom,0));background:var(--acc);color:#fff;border:0;border-radius:999px;padding:12px 22px;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.5);white-space:nowrap}
+#list{position:fixed;inset:0;background:#f4f4f6;color:#111;overflow:auto;padding:calc(10px + env(safe-area-inset-top,0)) 12px 40px}
+#list header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;margin-bottom:8px}
+#list header b{font-size:17px}
+#list header .pill{padding:8px 10px}
+#lsum{color:#333;margin:4px 2px 4px;font-size:14px}
+#lhelp{color:#666;margin:0 2px 14px;font-size:13px;line-height:1.35}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.card{background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);position:relative;cursor:pointer}
+.card img{width:100%;aspect-ratio:59/86;object-fit:cover;border-radius:8px;display:block;background:#ddd}
+.card .r{position:absolute;top:14px;left:14px;background:#fff;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.card b{display:block;margin-top:6px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .p{color:var(--red);font-weight:800;font-size:15px}
+.card small{display:block;color:#666;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{grid-column:1/-1;text-align:center;color:#777;padding:40px 10px;line-height:1.5}
+.noimg{width:100%;aspect-ratio:59/86;border-radius:8px;background:#c9b27c;color:#3b2f10;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:700;padding:8px}
+dialog{border:0;border-radius:16px;padding:0;max-width:92vw;width:420px;color:#111;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+.ph{padding:16px 16px 8px}.ph b{font-size:17px;display:block}.ph small{color:#555;display:block;margin-top:4px;line-height:1.35}
+.sets{max-height:50vh;overflow:auto;padding:0 8px}
+.set{display:grid;grid-template-columns:1fr auto auto;gap:10px;width:100%;text-align:left;background:#f4f4f6;border:2px solid transparent;border-radius:10px;padding:10px 12px;margin:6px 0;color:#111;align-items:center}
+.set.on{border-color:var(--acc);background:#fff4ec}.set em{color:#666;font-style:normal;font-size:13px}.set b{color:var(--red)}
+.pf{display:flex;justify-content:space-between;padding:12px 16px 16px;gap:8px}
+#help{position:fixed;inset:0;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:18px;z-index:10;overflow:auto}
+#help[hidden]{display:none}
+.box{background:#fff;color:#111;border-radius:16px;padding:20px;max-width:440px;width:100%}
+.box h2{margin:0 0 10px;font-size:20px}.box ol{padding-left:20px;margin:0 0 12px;line-height:1.5}.box li{margin-bottom:6px}
+.box .note{font-size:13px;color:#555;margin:0 0 14px;line-height:1.4}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0));background:rgba(20,20,26,.94);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;max-width:88vw;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="scan">
+  <video id="cam" autoplay playsinline muted></video>
+  <div id="guide"><div id="price"></div><div class="hint">Metti qui la carta, dritta e intera</div></div>
+  <div id="top">
+    <div class="pills">
+      <button class="pill" id="helpbtn">Aiuto</button>
+      <button class="pill" id="torch">Torcia</button>
+      <button class="pill" id="flip">Cambia camera</button>
+      <label class="pill">Da foto<input id="file" type="file" accept="image/*" capture="environment" hidden></label>
+    </div>
+    <span id="status">Avvio…</span>
+  </div>
+  <div id="stack"></div>
+  <div id="totals"><small>Totale (minimo Cardmarket)</small><b id="tot">0,00 €</b><small id="tot2"></small></div>
+  <button id="organize">Organizza (0)</button>
+</div>
+<div id="list" hidden>
+  <header>
+    <button class="pill dark" id="back">‹ Scanner</button><b id="ltitle">0 carte</b>
+    <span><button class="pill dark" id="addname">Aggiungi per nome</button> <button class="pill dark" id="csv">Copia CSV</button> <button class="pill dark" id="clear">Svuota</button></span>
+  </header>
+  <div id="lsum"></div>
+  <div id="lhelp">Tocca una carta per cambiare stampa (set e rarità) o per rimuoverla. Prezzo in € = minimo Cardmarket della carta; prezzo in $ = TCGplayer della stampa scelta.</div>
+  <div class="grid" id="grid"></div>
+</div>
+<div id="help" hidden>
+  <div class="box">
+    <h2>Come funziona</h2>
+    <ol>
+      <li><b>Metti una carta nel riquadro</b>, dritta e intera, con buona luce.</li>
+      <li>In mezzo secondo <b>il prezzo compare sopra la carta</b> e la carta entra nella lista in basso.</li>
+      <li><b>Togli la carta e metti la successiva.</b> Non c'è niente da premere.</li>
+      <li><b>Organizza</b> apre la lista: tocca una carta per cambiare stampa (set e rarità) o rimuoverla, "Copia CSV" per esportare.</li>
+    </ol>
+    <p class="note">Il prezzo in € è il minimo Cardmarket della carta; per ogni stampa c'è il prezzo TCGplayer in $. Sono prezzi di mercato indicativi, non un'offerta di acquisto. Consiglio dal video: telefono fermo (appoggiato) e carte una alla volta sotto la camera.</p>
+    <button class="pill acc big" id="helpok">Ho capito, iniziamo</button>
+  </div>
+</div>
+<dialog id="pick"></dialog>
+<div id="toast"></div>
+<canvas id="work" hidden></canvas>
+<script>
+const $=s=>document.querySelector(s);
+const ASPECT=59/86, M=0.15, WW=240, WH=350, GW=WW/(1+2*M), GH=GW/ASPECT;     // canvas di lavoro = guida + margine
+const ART=[0.116,0.179,0.884,0.705], OFFS=[-2,-1,0,1,2], SCALES=[0.9,1,1.1], STEP=0.04, STEP2=0.015;
+const T={a:18,pd:40,m:4};                        // soglie Hamming (illustrazione, carta p+d, margine sul 2° candidato), validate da test_match.py
+const DEBUG=location.search.includes('debug');
+const eur=new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}), usd=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
+const video=$('#cam'), work=$('#work'), wctx=work.getContext('2d',{willReadFrequently:true});
+work.width=WW; work.height=WH;
+let DB=null, BYID=new Map(), N=0, DH,DL,PH,PL,AH,AL,IMGCARD,IMGID;
+let scans=JSON.parse(localStorage.getItem('scans')||'[]');
+let track=null, torchOn=false, locked=null, stable=null, stableN=0, missN=0, looping=false, paused=false, priceTimer=0, toastTimer=0;
+
+const status=t=>{$('#status').textContent=t;};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const save=()=>{try{localStorage.setItem('scans',JSON.stringify(scans));}catch(e){toast('Memoria piena: copia il CSV e svuota la lista');}};
+function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),3000);}
+const hx=h=>[parseInt(h.slice(0,8),16)>>>0, parseInt(h.slice(8),16)>>>0];
+function pop(x){x=x-((x>>>1)&0x55555555);x=(x&0x33333333)+((x>>>2)&0x33333333);return(((x+(x>>>4))&0x0F0F0F0F)*0x01010101)>>>24;}
+const ham=(h,l,H,L)=>pop((h^H)>>>0)+pop((l^L)>>>0);
+
+// ---- hash percettivi: stessa formula di build_db.py / test_match.py (dHash 9x8, pHash DCT 32x32 -> 8x8 vs mediana)
+function integral(g){const W1=WW+1,I=new Float64Array(W1*(WH+1));for(let y=0;y<WH;y++){let row=0;for(let x=0;x<WW;x++){row+=g[y*WW+x];I[(y+1)*W1+x+1]=I[y*W1+x+1]+row;}}return I;}
+function boxResize(I,x0,y0,x1,y1,w,h){const W1=WW+1,xs=[],ys=[];
+  for(let i=0;i<=w;i++)xs.push(Math.min(WW,Math.max(0,Math.round(x0+(x1-x0)*i/w))));
+  for(let j=0;j<=h;j++)ys.push(Math.min(WH,Math.max(0,Math.round(y0+(y1-y0)*j/h))));
+  const o=new Float32Array(w*h);
+  for(let j=0;j<h;j++)for(let i=0;i<w;i++){const a=(ys[j+1]-ys[j])*(xs[i+1]-xs[i]);
+    o[j*w+i]=a>0?Math.round((I[ys[j+1]*W1+xs[i+1]]-I[ys[j]*W1+xs[i+1]]-I[ys[j+1]*W1+xs[i]]+I[ys[j]*W1+xs[i]])/a):0;}
+  return o;}
+function dhashBits(s){let hi=0,lo=0,k=0;for(let y=0;y<8;y++)for(let x=0;x<8;x++){const b=s[y*9+x+1]>s[y*9+x]?1:0;if(k<32)hi=(hi<<1)|b;else lo=(lo<<1)|b;k++;}return[hi>>>0,lo>>>0];}
+const COS=new Float32Array(8*32);for(let u=0;u<8;u++)for(let x=0;x<32;x++)COS[u*32+x]=Math.cos((2*x+1)*u*Math.PI/64);
+const C0=Math.sqrt(1/32),C1=Math.sqrt(2/32);
+function phashBits(s){const R=new Float32Array(32*8);
+  for(let y=0;y<32;y++)for(let v=0;v<8;v++){let t=0;for(let x=0;x<32;x++)t+=s[y*32+x]*COS[v*32+x];R[y*8+v]=(v?C1:C0)*t;}
+  const F=new Float32Array(64);
+  for(let u=0;u<8;u++)for(let v=0;v<8;v++){let t=0;for(let y=0;y<32;y++)t+=R[y*8+v]*COS[u*32+y];F[u*8+v]=(u?C1:C0)*t;}
+  const so=Array.from(F).sort((a,b)=>a-b),med=(so[31]+so[32])/2;let hi=0,lo=0;
+  for(let k=0;k<64;k++){const b=F[k]>med?1:0;if(k<32)hi=(hi<<1)|b;else lo=(lo<<1)|b;}return[hi>>>0,lo>>>0];}
+
+// ---- acquisizione: disegna guida+margine della sorgente nel canvas di lavoro e restituisce i grigi
+function grab(src,g){const mx=g.w*M,my=g.h*M;wctx.fillStyle='#000';wctx.fillRect(0,0,WW,WH);
+  wctx.drawImage(src,g.x-mx,g.y-my,g.w+2*mx,g.h+2*my,0,0,WW,WH);
+  const d=wctx.getImageData(0,0,WW,WH).data,gr=new Float32Array(WW*WH);
+  for(let i=0,j=0;i<gr.length;i++,j+=4)gr[i]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);
+  return gr;}
+function guideInVideo(){const vw=video.videoWidth,vh=video.videoHeight,r=$('#guide').getBoundingClientRect(),
+  sc=Math.max(innerWidth/vw,innerHeight/vh),ox=(innerWidth-vw*sc)/2,oy=(innerHeight-vh*sc)/2;
+  return{x:(r.left-ox)/sc,y:(r.top-oy)/sc,w:r.width/sc,h:r.height/sc};}
+
+// ---- ricerca: griglia di posizioni/scale attorno alla guida, pHash dell'ILLUSTRAZIONE su tutto il db
+//      (la cornice e' uguale per tutte le carte, l'illustrazione no), conferma con pHash + dHash dell'intera carta
+function pass(I,rects,minA,b){for(const[x0,y0,w,h]of rects){
+    const[h1,l1]=phashBits(boxResize(I,x0+ART[0]*w,y0+ART[1]*h,x0+ART[2]*w,y0+ART[3]*h,32,32));
+    for(let k=0;k<N;k++){const a=pop((h1^AH[k])>>>0)+pop((l1^AL[k])>>>0);if(a<minA[k])minA[k]=a;if(a<b.a)b={a,k,x0,y0,w,h};}}
+  return b;}
+function search(gr){const I=integral(gr),minA=new Uint8Array(N).fill(99);let b={a:99,k:-1};
+  const coarse=[];for(const s of SCALES)for(const dy of OFFS)for(const dx of OFFS)coarse.push([WW/2-GW*s/2+dx*STEP*GW,WH/2-GH*s/2+dy*STEP*GH,GW*s,GH*s]);
+  b=pass(I,coarse,minA,b);if(b.k<0)return b;
+  const cx=b.x0+b.w/2,cy=b.y0+b.h/2,fine=[];                                   // raffinamento fine attorno al migliore
+  for(const f of[0.96,1,1.04])for(const dy of[-1,0,1])for(const dx of[-1,0,1])fine.push([cx-b.w*f/2+dx*STEP2*GW,cy-b.h*f/2+dy*STEP2*GH,b.w*f,b.h*f]);
+  b=pass(I,fine,minA,b);
+  b.a2=99;for(let k=0;k<N;k++)if(k!==b.k&&minA[k]<b.a2)b.a2=minA[k];          // seconda miglior illustrazione: il margine a2-a e' la sicurezza
+  const[ph,pl]=phashBits(boxResize(I,b.x0,b.y0,b.x0+b.w,b.y0+b.h,32,32));b.p=ham(ph,pl,PH[b.k],PL[b.k]);
+  const[dh,dl]=dhashBits(boxResize(I,b.x0,b.y0,b.x0+b.w,b.y0+b.h,9,8));b.d=ham(dh,dl,DH[b.k],DL[b.k]);
+  return b;}
+const accepted=b=>b.k>=0&&b.a<=T.a&&b.p+b.d<=T.pd&&b.a2-b.a>=T.m;
+
+function tick(){if(!looping)return;
+  if(!paused&&video.videoWidth&&DB){const b=search(grab(video,guideInVideo()));judge(b);}
+  setTimeout(tick,70);}
+function judge(b){const ok=accepted(b),card=ok?IMGCARD[b.k]:-1;
+  if(DEBUG&&b.k>=0)status(`a${b.a}/${b.a2} p${b.p} d${b.d} ${DB.cards[IMGCARD[b.k]][1]}`);
+  if(ok){if(card===stable)stableN++;else{stable=card;stableN=1;}missN=0;}
+  else if(++missN>=3&&locked!==null){locked=null;stable=null;stableN=0;$('#guide').classList.remove('lock');if(!DEBUG)status('Metti la prossima carta nel riquadro');}
+  if(ok&&stableN>=2&&card!==locked){locked=card;addScan(card,b);}}
+
+// ---- scansioni
+const card=it=>{const i=BYID.get(it.id);return i===undefined?null:DB.cards[i];};
+function priceOf(it){const c=card(it);if(!c)return{eur:0,usd:0,set:null,c:null};const set=c[5][it.si]||null;return{eur:c[3],usd:set?set[2]:c[4],set,c};}
+function addScan(ci,b){const c=DB.cards[ci],sets=c[5];let si=0,best=1e9;sets.forEach((s,i)=>{if(s[2]>0&&s[2]<best){best=s[2];si=i;}});   // default: stampa piu' economica (prudente)
+  let thumb='';if(b){const th=document.createElement('canvas');th.width=60;th.height=88;th.getContext('2d').drawImage(work,b.x0,b.y0,b.w,b.h,0,0,60,88);thumb=th.toDataURL('image/jpeg',.6);}
+  scans.push({id:c[0],si,thumb,t:Date.now()});if(scans.length>300)scans.shift();
+  save();render();if(navigator.vibrate&&navigator.userActivation&&navigator.userActivation.hasBeenActive)navigator.vibrate(30);
+  if(b){showPrice(scans.length-1);$('#guide').classList.add('lock');if(!DEBUG)status('Riconosciuta: '+c[1]);}else toast('Aggiunta alla lista: '+c[1]);}
+const thumbHtml=(s,name)=>s.thumb?`<img src="${s.thumb}" alt="">`:`<div class="noimg">${esc(name)}</div>`;
+function showPrice(i){const it=scans[i],p=priceOf(it);if(!p.c)return;
+  const main=p.eur>0?eur.format(p.eur):(p.usd>0?usd.format(p.usd):'prezzo n.d.');
+  $('#price').innerHTML=`${main}<small>${esc(p.c[1])}<br>${p.eur>0?'minimo Cardmarket':'TCGplayer'} · ${p.c[5].length} stampe · tocca per cambiare stampa</small>`;
+  $('#price').onclick=()=>openPick(i);clearTimeout(priceTimer);priceTimer=setTimeout(()=>{$('#price').innerHTML='';},7000);}
+function render(){const n=scans.length;$('#organize').textContent=`Organizza (${n})`;
+  $('#stack').innerHTML=scans.slice(-3).map(s=>thumbHtml(s,(card(s)||['','?'])[1])).join('')+(n?`<span class="n">${n}</span>`:'');
+  let e=0,u=0;scans.forEach(s=>{const p=priceOf(s);e+=p.eur;u+=p.usd;});
+  $('#tot').textContent=eur.format(e);$('#tot2').textContent=n?`TCGplayer, stampe scelte: ${usd.format(u)}`:'';
+  $('#ltitle').textContent=`${n} carte`;$('#lsum').innerHTML=n?`Totale <b>${eur.format(e)}</b> (minimo Cardmarket) · <b>${usd.format(u)}</b> (TCGplayer, stampe scelte)`:'';
+  $('#grid').innerHTML=n?scans.map((s,i)=>{const p=priceOf(s);if(!p.c)return'';
+    return`<div class="card" data-i="${i}">${thumbHtml(s,p.c[1])}<span class="r">${esc(p.set?p.set[1]:'?')}</span><b>${esc(p.c[1])}</b><span class="p">${p.eur>0?eur.format(p.eur):'—'}</span><small>${p.set?esc(p.set[0])+' · '+usd.format(p.set[2]):'nessuna stampa nota'}</small></div>`;}).reverse().join('')
+    :'<div class="empty">Nessuna carta ancora.<br>Torna allo scanner e metti una carta nel riquadro, oppure usa "Aggiungi per nome".</div>';}
+function openPick(i){const it=scans[i],c=card(it);if(!c)return;const d=$('#pick');
+  d.innerHTML=`<div class="ph"><b>${esc(c[1])}</b><small>${esc(c[2])} · minimo Cardmarket ${c[3]>0?eur.format(c[3]):'n.d.'}<br>Scegli la stampa: codice set · rarità · prezzo TCGplayer</small></div>
+  <div class="sets">${c[5].map((s,k)=>`<button class="set${k===it.si?' on':''}" data-k="${k}"><span>${esc(s[0])}</span><em>${esc(s[1])}</em><b>${s[2]>0?usd.format(s[2]):'—'}</b></button>`).join('')||'<p>Nessuna stampa nota per questa carta.</p>'}</div>
+  <div class="pf"><button class="pill dark" id="rm">Rimuovi dalla lista</button><button class="pill acc" id="ok">Chiudi</button></div>`;
+  d.querySelectorAll('.set').forEach(b=>b.onclick=()=>{it.si=+b.dataset.k;save();render();d.close();});
+  d.querySelector('#rm').onclick=()=>{scans.splice(i,1);save();render();d.close();};
+  d.querySelector('#ok').onclick=()=>d.close();d.showModal();}
+
+// ---- foto singola (senza camera live): la carta deve riempire circa il riquadro centrale della foto
+const loadImg=src=>new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('immagine non leggibile'));im.src=src;});
+async function scanStill(src){const img=typeof src==='string'?await loadImg(src):src;
+  const W=img.naturalWidth,H=img.naturalHeight;let gh=(GH/WH)*H,gw=gh*ASPECT;if(gw>(GH/WH)*W){gw=(GH/WH)*W;gh=gw/ASPECT;}
+  const b=search(grab(img,{x:(W-gw)/2,y:(H-gh)/2,w:gw,h:gh}));
+  if(accepted(b))addScan(IMGCARD[b.k],b);else toast('Nessuna carta riconosciuta. Fotografa la carta intera, dritta, al centro e ben illuminata, poi riprova.');
+  return b.k<0?b:{...b,ok:accepted(b),imgId:IMGID[b.k],id:DB.cards[IMGCARD[b.k]][0],name:DB.cards[IMGCARD[b.k]][1]};}
+
+// ---- camera
+async function startCam(deviceId){if(track)track.stop();
+  const v=deviceId?{deviceId:{exact:deviceId}}:{facingMode:'environment'};v.width={ideal:1280};v.height={ideal:720};
+  try{const st=await navigator.mediaDevices.getUserMedia({video:v});video.srcObject=st;track=st.getVideoTracks()[0];status('Metti una carta nel riquadro');
+    if(!looping){looping=true;tick();}}
+  catch(e){status('Camera non disponibile ('+e.name+'). Apri il link in https e consenti la camera, oppure usa "Da foto".');}}
+$('#flip').onclick=async()=>{const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+  if(ds.length<2)return toast('C\'è una sola camera');const cur=track&&track.getSettings().deviceId,i=ds.findIndex(d=>d.deviceId===cur);startCam(ds[(i+1)%ds.length].deviceId);};
+$('#torch').onclick=async()=>{const caps=track&&track.getCapabilities&&track.getCapabilities();if(!caps||!caps.torch)return toast('Torcia non disponibile su questo telefono/browser');
+  torchOn=!torchOn;try{await track.applyConstraints({advanced:[{torch:torchOn}]});$('#torch').classList.toggle('on',torchOn);}catch(e){toast('Torcia: '+e.message);}};
+$('#file').onchange=e=>{const f=e.target.files[0];if(f)scanStill(URL.createObjectURL(f));e.target.value='';};
+$('#organize').onclick=()=>{paused=true;$('#list').hidden=false;$('#scan').hidden=true;};
+$('#back').onclick=()=>{paused=false;$('#list').hidden=true;$('#scan').hidden=false;};
+$('#grid').onclick=e=>{const el=e.target.closest('.card');if(el)openPick(+el.dataset.i);};
+$('#clear').onclick=()=>{if(scans.length&&confirm('Svuotare tutta la lista?')){scans=[];save();render();}};
+$('#addname').onclick=()=>{const q=(prompt('Nome della carta (anche una parte, in inglese):')||'').trim().toLowerCase();if(!q)return;   // fallback quando il riconoscimento rifiuta
+  const hits=[];for(let i=0;i<DB.cards.length&&hits.length<15;i++)if(DB.cards[i][1].toLowerCase().includes(q))hits.push(i);
+  if(!hits.length)return toast('Nessuna carta trovata con questo nome');const d=$('#pick');
+  d.innerHTML=`<div class="ph"><b>Aggiungi per nome</b><small>${hits.length} risultati per "${esc(q)}": tocca la carta giusta</small></div><div class="sets">${hits.map(i=>`<button class="set" data-i="${i}"><span>${esc(DB.cards[i][1])}</span><em>${esc(DB.cards[i][2])}</em><b>${DB.cards[i][3]>0?eur.format(DB.cards[i][3]):'—'}</b></button>`).join('')}</div><div class="pf"><span></span><button class="pill acc" id="ok">Chiudi</button></div>`;
+  d.querySelectorAll('.set').forEach(b=>b.onclick=()=>{addScan(+b.dataset.i,null);d.close();});d.querySelector('#ok').onclick=()=>d.close();d.showModal();};
+$('#csv').onclick=async()=>{const rows=[['nome','id','stampa','rarita','cardmarket_min_eur','tcgplayer_usd']];
+  scans.forEach(s=>{const p=priceOf(s);if(p.c)rows.push([p.c[1],s.id,p.set?p.set[0]:'',p.set?p.set[1]:'',p.eur,p.usd]);});
+  const txt=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+  try{await navigator.clipboard.writeText(txt);toast('Lista copiata negli appunti (CSV)');}catch(e){prompt('Copia il CSV:',txt);}};
+$('#helpbtn').onclick=()=>{$('#help').hidden=false;};
+$('#helpok').onclick=()=>{$('#help').hidden=true;try{localStorage.setItem('help1','1');}catch(e){}};
+
+// ---- database (costruito da build_db.py)
+async function loadDB(){status('Carico il database delle carte (solo la prima volta)…');const r=await fetch('db.json');if(!r.ok)throw new Error('db.json '+r.status);DB=await r.json();
+  const imgs=[];DB.cards.forEach((c,ci)=>{BYID.set(c[0],ci);c[6].forEach(im=>imgs.push([ci,im]));});
+  N=imgs.length;DH=new Uint32Array(N);DL=new Uint32Array(N);PH=new Uint32Array(N);PL=new Uint32Array(N);AH=new Uint32Array(N);AL=new Uint32Array(N);IMGCARD=new Uint32Array(N);IMGID=new Uint32Array(N);
+  imgs.forEach(([ci,im],k)=>{IMGCARD[k]=ci;IMGID[k]=im[0];[DH[k],DL[k]]=hx(im[1]);[PH[k],PL[k]]=hx(im[2]);[AH[k],AL[k]]=hx(im[3]);});
+  status(`Pronto: ${DB.n.toLocaleString('it-IT')} carte, prezzi del ${DB.built}`);}
+(async()=>{render();let seen=false;try{seen=!!localStorage.getItem('help1');}catch(e){}if(!seen)$('#help').hidden=false;
+  try{await loadDB();}catch(e){status('Errore nel caricare il database: '+e.message);return;}
+  if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)startCam();else status('Questo browser non supporta la camera. Usa "Da foto".');
+  if('serviceWorker'in navigator&&!DEBUG)navigator.serviceWorker.register('sw.js').catch(()=>{});})();
+window.ygo={scanStill,search,grab,get db(){return DB;},get scans(){return scans;}};
+</script>
+</body>
+</html>
