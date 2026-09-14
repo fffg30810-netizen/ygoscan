@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
 <title>YGO Scan</title>
 <style>
 :root{--bg:#0b0b0f;--acc:#ff7a1a;--gold:#e9c46a;--red:#e0323c}
@@ -78,6 +79,7 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
   <div id="top">
     <div class="pills">
       <button class="pill" id="helpbtn">Aiuto</button>
+      <button class="pill" id="sound">Suono: sì</button>
       <button class="pill" id="torch">Torcia</button>
       <button class="pill" id="flip">Cambia camera</button>
       <label class="pill">Da foto<input id="file" type="file" accept="image/*" capture="environment" hidden></label>
@@ -116,8 +118,8 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 <script>
 const $=s=>document.querySelector(s);
 const ASPECT=59/86, M=0.15, WW=240, WH=350, GW=WW/(1+2*M), GH=GW/ASPECT;     // canvas di lavoro = guida + margine
-const ART=[0.116,0.179,0.884,0.705], OFFS=[-2,-1,0,1,2], SCALES=[0.9,1,1.1], STEP=0.04, STEP2=0.015;
-const T={a:18,pd:40,m:4};                        // soglie Hamming (illustrazione, carta p+d, margine sul 2° candidato), validate da test_match.py
+const ART=[0.116,0.179,0.884,0.705], OFFS=[-2,-1,0,1,2], SCALES=[0.9,1,1.1], STEP=0.04, STEP2=0.015, SHORT=4;
+const T={a:14,s:40,m:6};                         // soglie Hamming (illustrazione a, punteggio S=a+p+d, margine S2-S), validate da test_match.py sul db completo
 const DEBUG=location.search.includes('debug');
 const eur=new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}), usd=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
 const video=$('#cam'), work=$('#work'), wctx=work.getContext('2d',{willReadFrequently:true});
@@ -165,54 +167,60 @@ function guideInVideo(){const vw=video.videoWidth,vh=video.videoHeight,r=$('#gui
 
 // ---- ricerca: griglia di posizioni/scale attorno alla guida, pHash dell'ILLUSTRAZIONE su tutto il db
 //      (la cornice e' uguale per tutte le carte, l'illustrazione no), conferma con pHash + dHash dell'intera carta
-function pass(I,rects,minA,b){for(const[x0,y0,w,h]of rects){
+//      1) shortlist per illustrazione (griglia grossa + raffinamento), 2) punteggio combinato S=a+p+d sulla shortlist, margine sul 2°
+function pass(I,rects,r0,minA,bestR){for(let j=0;j<rects.length;j++){const[x0,y0,w,h]=rects[j];
     const[h1,l1]=phashBits(boxResize(I,x0+ART[0]*w,y0+ART[1]*h,x0+ART[2]*w,y0+ART[3]*h,32,32));
-    for(let k=0;k<N;k++){const a=pop((h1^AH[k])>>>0)+pop((l1^AL[k])>>>0);if(a<minA[k])minA[k]=a;if(a<b.a)b={a,k,x0,y0,w,h};}}
-  return b;}
-function search(gr){const I=integral(gr),minA=new Uint8Array(N).fill(99);let b={a:99,k:-1};
-  const coarse=[];for(const s of SCALES)for(const dy of OFFS)for(const dx of OFFS)coarse.push([WW/2-GW*s/2+dx*STEP*GW,WH/2-GH*s/2+dy*STEP*GH,GW*s,GH*s]);
-  b=pass(I,coarse,minA,b);if(b.k<0)return b;
-  const cx=b.x0+b.w/2,cy=b.y0+b.h/2,fine=[];                                   // raffinamento fine attorno al migliore
-  for(const f of[0.96,1,1.04])for(const dy of[-1,0,1])for(const dx of[-1,0,1])fine.push([cx-b.w*f/2+dx*STEP2*GW,cy-b.h*f/2+dy*STEP2*GH,b.w*f,b.h*f]);
-  b=pass(I,fine,minA,b);
-  b.a2=99;for(let k=0;k<N;k++)if(k!==b.k&&minA[k]<b.a2)b.a2=minA[k];          // seconda miglior illustrazione: il margine a2-a e' la sicurezza
-  const[ph,pl]=phashBits(boxResize(I,b.x0,b.y0,b.x0+b.w,b.y0+b.h,32,32));b.p=ham(ph,pl,PH[b.k],PL[b.k]);
-  const[dh,dl]=dhashBits(boxResize(I,b.x0,b.y0,b.x0+b.w,b.y0+b.h,9,8));b.d=ham(dh,dl,DH[b.k],DL[b.k]);
-  return b;}
-const accepted=b=>b.k>=0&&b.a<=T.a&&b.p+b.d<=T.pd&&b.a2-b.a>=T.m;
+    for(let k=0;k<N;k++){const a=pop((h1^AH[k])>>>0)+pop((l1^AL[k])>>>0);if(a<minA[k]){minA[k]=a;bestR[k]=r0+j;}}}}
+function search(gr){if(!N)return{k:-1};const I=integral(gr),minA=new Uint8Array(N).fill(99),bestR=new Uint8Array(N);
+  const rects=[];for(const s of SCALES)for(const dy of OFFS)for(const dx of OFFS)rects.push([WW/2-GW*s/2+dx*STEP*GW,WH/2-GH*s/2+dy*STEP*GH,GW*s,GH*s]);
+  pass(I,rects,0,minA,bestR);
+  let kb=0;for(let k=1;k<N;k++)if(minA[k]<minA[kb])kb=k;
+  const[bx,by,bw,bh]=rects[bestR[kb]],cx=bx+bw/2,cy=by+bh/2,fine=[];            // raffinamento fine attorno al migliore
+  for(const f of[0.96,1,1.04])for(const dy of[-1,0,1])for(const dx of[-1,0,1])fine.push([cx-bw*f/2+dx*STEP2*GW,cy-bh*f/2+dy*STEP2*GH,bw*f,bh*f]);
+  pass(I,fine,rects.length,minA,bestR);rects.push(...fine);
+  let amin=99;for(let k=0;k<N;k++)if(minA[k]<amin)amin=minA[k];
+  let short=[];for(let k=0;k<N;k++)if(minA[k]<=amin+SHORT)short.push(k);
+  if(short.length>40){short.sort((x,y)=>minA[x]-minA[y]);short=short.slice(0,40);}
+  const cache=new Map(),scored=[];
+  for(const k of short){const r=bestR[k];if(!cache.has(r)){const[x0,y0,w,h]=rects[r];cache.set(r,[phashBits(boxResize(I,x0,y0,x0+w,y0+h,32,32)),dhashBits(boxResize(I,x0,y0,x0+w,y0+h,9,8))]);}
+    const[[ph,pl],[dh,dl]]=cache.get(r),p=ham(ph,pl,PH[k],PL[k]),d=ham(dh,dl,DH[k],DL[k]);scored.push({S:minA[k]+p+d,k,d,p,a:minA[k],r});}
+  scored.sort((x,y)=>x.S-y.S||x.k-y.k);const b=scored[0],[x0,y0,w,h]=rects[b.r];
+  return{...b,S2:scored.length>1?scored[1].S:99,x0,y0,w,h};}
+const accepted=b=>b.k>=0&&b.a<=T.a&&b.S<=T.s&&b.S2-b.S>=T.m;
 
 function tick(){if(!looping)return;
   if(!paused&&video.videoWidth&&DB){const b=search(grab(video,guideInVideo()));judge(b);}
   setTimeout(tick,70);}
 function judge(b){const ok=accepted(b),card=ok?IMGCARD[b.k]:-1;
-  if(DEBUG&&b.k>=0)status(`a${b.a}/${b.a2} p${b.p} d${b.d} ${DB.cards[IMGCARD[b.k]][1]}`);
+  if(DEBUG&&b.k>=0)status(`a${b.a} S${b.S}/${b.S2} p${b.p} d${b.d} ${DB.cards[IMGCARD[b.k]][1]}`);
   if(ok){if(card===stable)stableN++;else{stable=card;stableN=1;}missN=0;}
   else if(++missN>=3&&locked!==null){locked=null;stable=null;stableN=0;$('#guide').classList.remove('lock');if(!DEBUG)status('Metti la prossima carta nel riquadro');}
   if(ok&&stableN>=2&&card!==locked){locked=card;addScan(card,b);}}
 
 // ---- scansioni
 const card=it=>{const i=BYID.get(it.id);return i===undefined?null:DB.cards[i];};
+const nm=c=>c[7]||c[1], en=c=>c[7]?c[1]:'';               // nome italiano se esiste, altrimenti inglese; en = inglese da mostrare in piccolo
 function priceOf(it){const c=card(it);if(!c)return{eur:0,usd:0,set:null,c:null};const set=c[5][it.si]||null;return{eur:c[3],usd:set?set[2]:c[4],set,c};}
 function addScan(ci,b){const c=DB.cards[ci],sets=c[5];let si=0,best=1e9;sets.forEach((s,i)=>{if(s[2]>0&&s[2]<best){best=s[2];si=i;}});   // default: stampa piu' economica (prudente)
   let thumb='';if(b){const th=document.createElement('canvas');th.width=60;th.height=88;th.getContext('2d').drawImage(work,b.x0,b.y0,b.w,b.h,0,0,60,88);thumb=th.toDataURL('image/jpeg',.6);}
   scans.push({id:c[0],si,thumb,t:Date.now()});if(scans.length>300)scans.shift();
-  save();render();if(navigator.vibrate&&navigator.userActivation&&navigator.userActivation.hasBeenActive)navigator.vibrate(30);
-  if(b){showPrice(scans.length-1);$('#guide').classList.add('lock');if(!DEBUG)status('Riconosciuta: '+c[1]);}else toast('Aggiunta alla lista: '+c[1]);}
+  save();render();coin();if(navigator.vibrate&&navigator.userActivation&&navigator.userActivation.hasBeenActive)navigator.vibrate(30);
+  if(b){showPrice(scans.length-1);$('#guide').classList.add('lock');if(!DEBUG)status('Riconosciuta: '+nm(c));}else toast('Aggiunta alla lista: '+nm(c));}
 const thumbHtml=(s,name)=>s.thumb?`<img src="${s.thumb}" alt="">`:`<div class="noimg">${esc(name)}</div>`;
 function showPrice(i){const it=scans[i],p=priceOf(it);if(!p.c)return;
   const main=p.eur>0?eur.format(p.eur):(p.usd>0?usd.format(p.usd):'prezzo n.d.');
-  $('#price').innerHTML=`${main}<small>${esc(p.c[1])}<br>${p.eur>0?'minimo Cardmarket':'TCGplayer'} · ${p.c[5].length} stampe · tocca per cambiare stampa</small>`;
+  $('#price').innerHTML=`${main}<small>${esc(nm(p.c))}${en(p.c)?' · '+esc(en(p.c)):''}<br>${p.eur>0?'minimo Cardmarket':'TCGplayer'} · ${p.c[5].length} stampe · tocca per cambiare stampa</small>`;
   $('#price').onclick=()=>openPick(i);clearTimeout(priceTimer);priceTimer=setTimeout(()=>{$('#price').innerHTML='';},7000);}
 function render(){const n=scans.length;$('#organize').textContent=`Organizza (${n})`;
-  $('#stack').innerHTML=scans.slice(-3).map(s=>thumbHtml(s,(card(s)||['','?'])[1])).join('')+(n?`<span class="n">${n}</span>`:'');
+  $('#stack').innerHTML=scans.slice(-3).map(s=>thumbHtml(s,card(s)?nm(card(s)):'?')).join('')+(n?`<span class="n">${n}</span>`:'');
   let e=0,u=0;scans.forEach(s=>{const p=priceOf(s);e+=p.eur;u+=p.usd;});
   $('#tot').textContent=eur.format(e);$('#tot2').textContent=n?`TCGplayer, stampe scelte: ${usd.format(u)}`:'';
   $('#ltitle').textContent=`${n} carte`;$('#lsum').innerHTML=n?`Totale <b>${eur.format(e)}</b> (minimo Cardmarket) · <b>${usd.format(u)}</b> (TCGplayer, stampe scelte)`:'';
   $('#grid').innerHTML=n?scans.map((s,i)=>{const p=priceOf(s);if(!p.c)return'';
-    return`<div class="card" data-i="${i}">${thumbHtml(s,p.c[1])}<span class="r">${esc(p.set?p.set[1]:'?')}</span><b>${esc(p.c[1])}</b><span class="p">${p.eur>0?eur.format(p.eur):'—'}</span><small>${p.set?esc(p.set[0])+' · '+usd.format(p.set[2]):'nessuna stampa nota'}</small></div>`;}).reverse().join('')
+    return`<div class="card" data-i="${i}">${thumbHtml(s,nm(p.c))}<span class="r">${esc(p.set?p.set[1]:'?')}</span><b>${esc(nm(p.c))}</b><span class="p">${p.eur>0?eur.format(p.eur):'—'}</span><small>${en(p.c)?esc(en(p.c))+' · ':''}${p.set?esc(p.set[0])+' · '+usd.format(p.set[2]):'nessuna stampa nota'}</small></div>`;}).reverse().join('')
     :'<div class="empty">Nessuna carta ancora.<br>Torna allo scanner e metti una carta nel riquadro, oppure usa "Aggiungi per nome".</div>';}
 function openPick(i){const it=scans[i],c=card(it);if(!c)return;const d=$('#pick');
-  d.innerHTML=`<div class="ph"><b>${esc(c[1])}</b><small>${esc(c[2])} · minimo Cardmarket ${c[3]>0?eur.format(c[3]):'n.d.'}<br>Scegli la stampa: codice set · rarità · prezzo TCGplayer</small></div>
+  d.innerHTML=`<div class="ph"><b>${esc(nm(c))}</b><small>${en(c)?esc(en(c))+' · ':''}${esc(c[2])} · minimo Cardmarket ${c[3]>0?eur.format(c[3]):'n.d.'}<br>Scegli la stampa: codice set · rarità · prezzo TCGplayer</small></div>
   <div class="sets">${c[5].map((s,k)=>`<button class="set${k===it.si?' on':''}" data-k="${k}"><span>${esc(s[0])}</span><em>${esc(s[1])}</em><b>${s[2]>0?usd.format(s[2]):'—'}</b></button>`).join('')||'<p>Nessuna stampa nota per questa carta.</p>'}</div>
   <div class="pf"><button class="pill dark" id="rm">Rimuovi dalla lista</button><button class="pill acc" id="ok">Chiudi</button></div>`;
   d.querySelectorAll('.set').forEach(b=>b.onclick=()=>{it.si=+b.dataset.k;save();render();d.close();});
@@ -226,6 +234,17 @@ async function scanStill(src){const img=typeof src==='string'?await loadImg(src)
   const b=search(grab(img,{x:(W-gw)/2,y:(H-gh)/2,w:gw,h:gh}));
   if(accepted(b))addScan(IMGCARD[b.k],b);else toast('Nessuna carta riconosciuta. Fotografa la carta intera, dritta, al centro e ben illuminata, poi riprova.');
   return b.k<0?b:{...b,ok:accepted(b),imgId:IMGID[b.k],id:DB.cards[IMGCARD[b.k]][0],name:DB.cards[IMGCARD[b.k]][1]};}
+
+// ---- suono "monetine" quando una carta entra nel conteggio (sintetizzato: nessun file audio)
+let AC=null,soundOn=true;try{soundOn=localStorage.getItem('sound')!=='0';}catch(e){}
+function audio(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();}catch(e){}return AC;}
+function coin(){if(!soundOn||!audio())return;const t=AC.currentTime;
+  [[988,0,.09],[1319,.09,.45]].forEach(([f,dt,len])=>{const o=AC.createOscillator(),g=AC.createGain();o.type='triangle';o.frequency.value=f;
+    g.gain.setValueAtTime(.0001,t+dt);g.gain.exponentialRampToValueAtTime(.3,t+dt+.012);g.gain.exponentialRampToValueAtTime(.0001,t+dt+len);
+    o.connect(g).connect(AC.destination);o.start(t+dt);o.stop(t+dt+len+.05);});}
+document.addEventListener('pointerdown',()=>audio(),{once:true,capture:true});   // sblocco audio al primo tocco (regola dei browser)
+$('#sound').onclick=()=>{soundOn=!soundOn;try{localStorage.setItem('sound',soundOn?'1':'0');}catch(e){}$('#sound').textContent=soundOn?'Suono: sì':'Suono: no';if(soundOn)coin();};
+$('#sound').textContent=soundOn?'Suono: sì':'Suono: no';
 
 // ---- camera
 async function startCam(deviceId){if(track)track.stop();
@@ -242,13 +261,13 @@ $('#organize').onclick=()=>{paused=true;$('#list').hidden=false;$('#scan').hidde
 $('#back').onclick=()=>{paused=false;$('#list').hidden=true;$('#scan').hidden=false;};
 $('#grid').onclick=e=>{const el=e.target.closest('.card');if(el)openPick(+el.dataset.i);};
 $('#clear').onclick=()=>{if(scans.length&&confirm('Svuotare tutta la lista?')){scans=[];save();render();}};
-$('#addname').onclick=()=>{const q=(prompt('Nome della carta (anche una parte, in inglese):')||'').trim().toLowerCase();if(!q)return;   // fallback quando il riconoscimento rifiuta
-  const hits=[];for(let i=0;i<DB.cards.length&&hits.length<15;i++)if(DB.cards[i][1].toLowerCase().includes(q))hits.push(i);
+$('#addname').onclick=()=>{const q=(prompt('Nome della carta, in italiano o in inglese (basta una parte):')||'').trim().toLowerCase();if(!q)return;   // fallback quando il riconoscimento rifiuta
+  const hits=[];for(let i=0;i<DB.cards.length&&hits.length<15;i++){const c=DB.cards[i];if(c[1].toLowerCase().includes(q)||(c[7]&&c[7].toLowerCase().includes(q)))hits.push(i);}
   if(!hits.length)return toast('Nessuna carta trovata con questo nome');const d=$('#pick');
-  d.innerHTML=`<div class="ph"><b>Aggiungi per nome</b><small>${hits.length} risultati per "${esc(q)}": tocca la carta giusta</small></div><div class="sets">${hits.map(i=>`<button class="set" data-i="${i}"><span>${esc(DB.cards[i][1])}</span><em>${esc(DB.cards[i][2])}</em><b>${DB.cards[i][3]>0?eur.format(DB.cards[i][3]):'—'}</b></button>`).join('')}</div><div class="pf"><span></span><button class="pill acc" id="ok">Chiudi</button></div>`;
+  d.innerHTML=`<div class="ph"><b>Aggiungi per nome</b><small>${hits.length} risultati per "${esc(q)}": tocca la carta giusta</small></div><div class="sets">${hits.map(i=>{const c=DB.cards[i];return`<button class="set" data-i="${i}"><span>${esc(nm(c))}${en(c)?'<br><em>'+esc(en(c))+'</em>':''}</span><em>${esc(c[2])}</em><b>${c[3]>0?eur.format(c[3]):'—'}</b></button>`;}).join('')}</div><div class="pf"><span></span><button class="pill acc" id="ok">Chiudi</button></div>`;
   d.querySelectorAll('.set').forEach(b=>b.onclick=()=>{addScan(+b.dataset.i,null);d.close();});d.querySelector('#ok').onclick=()=>d.close();d.showModal();};
-$('#csv').onclick=async()=>{const rows=[['nome','id','stampa','rarita','cardmarket_min_eur','tcgplayer_usd']];
-  scans.forEach(s=>{const p=priceOf(s);if(p.c)rows.push([p.c[1],s.id,p.set?p.set[0]:'',p.set?p.set[1]:'',p.eur,p.usd]);});
+$('#csv').onclick=async()=>{const rows=[['nome','nome_inglese','id','stampa','rarita','cardmarket_min_eur','tcgplayer_usd']];
+  scans.forEach(s=>{const p=priceOf(s);if(p.c)rows.push([nm(p.c),p.c[1],s.id,p.set?p.set[0]:'',p.set?p.set[1]:'',p.eur,p.usd]);});
   const txt=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
   try{await navigator.clipboard.writeText(txt);toast('Lista copiata negli appunti (CSV)');}catch(e){prompt('Copia il CSV:',txt);}};
 $('#helpbtn').onclick=()=>{$('#help').hidden=false;};

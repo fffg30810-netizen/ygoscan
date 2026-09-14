@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Costruisce docs/db.json: tutte le carte YGOPRODeck (nome, prezzi, stampe) + hash percettivi
-delle immagini. Le immagini si scaricano UNA volta in data/small/ (policy YGOPRODeck: scarica e
-ri-ospita, mai hotlink) e restano fuori dal repo.
+"""Costruisce docs/db.json: tutte le carte YGOPRODeck (nome inglese e italiano, prezzi, stampe) + hash
+percettivi delle immagini. Le immagini si scaricano UNA volta in data/small/ (policy YGOPRODeck: scarica e
+ri-ospita, mai hotlink) e restano fuori dal repo. Se docs/db.json esiste gia', gli hash delle immagini non
+presenti in locale vengono riusati: cosi' GitHub Actions aggiorna carte nuove e prezzi scaricando solo le
+immagini nuove (.github/workflows/update-db.yml).
 
   python build_db.py                 # build completa (~15k immagini, ~40 min la prima volta, poi incrementale)
   python build_db.py --limit 300     # prova rapida
@@ -83,16 +85,24 @@ def main():
     a = ap.parse_args()
     if a.selftest: return selftest()
     os.makedirs(IMGDIR, exist_ok=True)
-    cache = os.path.join(DATA, "cardinfo.json")
-    if not os.path.exists(cache) or time.time() - os.path.getmtime(cache) > 86400:
-        print("scarico l'elenco carte..."); raw = get(API)
-        json.dump(raw, open(cache, "w", encoding="utf-8"))
+    cache, cache_it = os.path.join(DATA, "cardinfo.json"), os.path.join(DATA, "cardinfo_it.json")
+    for path, url in ((cache, API), (cache_it, API + "?language=it")):
+        if not os.path.exists(path) or time.time() - os.path.getmtime(path) > 86400:
+            print("scarico l'elenco carte", url.split("?")[-1] if "?" in url else "(inglese)", "...")
+            json.dump(get(url), open(path, "w", encoding="utf-8"))
     cards = json.load(open(cache, encoding="utf-8"))["data"]
+    names_it = {c["id"]: c["name"] for c in json.load(open(cache_it, encoding="utf-8")).get("data", [])}
     if a.limit: cards = cards[: a.limit]
-    print("carte:", len(cards))
+    dst = os.path.join(HERE, "docs", "db.json"); prev = {}
+    if os.path.exists(dst):                          # hash gia' calcolati (es. GitHub Actions senza immagini locali): si riusano
+        try:
+            for c in json.load(open(dst, encoding="utf-8"))["cards"]:
+                for im in c[6]: prev[im[0]] = im
+        except Exception: prev = {}
+    print("carte:", len(cards), "| nomi italiani:", len(names_it), "| hash riusabili:", len(prev))
 
-    todo = [img["id"] for c in cards for img in c.get("card_images", [])
-            if not os.path.exists(os.path.join(IMGDIR, f"{img['id']}.jpg"))]
+    have = lambda iid: os.path.exists(os.path.join(IMGDIR, f"{iid}.jpg")) or iid in prev
+    todo = [img["id"] for c in cards for img in c.get("card_images", []) if not have(img["id"])]
     if not a.hash_only and todo:
         print("immagini da scaricare:", len(todo)); t0 = time.time()
         for i, iid in enumerate(todo):
@@ -109,18 +119,20 @@ def main():
         imgs = []
         for img in c.get("card_images", []):
             im = cv2.imread(os.path.join(IMGDIR, f"{img['id']}.jpg"))
-            if im is None: missing += 1; continue
-            imgs.append([img["id"]] + hashes(im))
+            if im is not None: imgs.append([img["id"]] + hashes(im))
+            elif img["id"] in prev: imgs.append(prev[img["id"]])
+            else: missing += 1
         if not imgs: continue
         pr = (c.get("card_prices") or [{}])[0]
         sets = [[s["set_code"], s.get("set_rarity_code", "").strip("()") or s.get("set_rarity", ""),
                  float(s.get("set_price") or 0)] for s in c.get("card_sets", [])]
+        name_it = names_it.get(c["id"], "")
         out.append([c["id"], c["name"], c.get("humanReadableCardType", c.get("type", "")),
-                    float(pr.get("cardmarket_price") or 0), float(pr.get("tcgplayer_price") or 0), sets, imgs])
-    db = {"v": 1, "built": time.strftime("%Y-%m-%d"), "n": len(out),
-          "fields": "id,name,type,cardmarket_eur,tcgplayer_usd,sets[[code,rarity,usd]],images[[id,dhash,phash,arthash]]",
+                    float(pr.get("cardmarket_price") or 0), float(pr.get("tcgplayer_price") or 0), sets, imgs,
+                    name_it if name_it != c["name"] else ""])
+    db = {"v": 2, "built": time.strftime("%Y-%m-%d"), "n": len(out),
+          "fields": "id,name,type,cardmarket_eur,tcgplayer_usd,sets[[code,rarity,usd]],images[[id,dhash,phash,arthash]],name_it",
           "cards": out}
-    dst = os.path.join(HERE, "docs", "db.json")
     json.dump(db, open(dst, "w", encoding="utf-8"), separators=(",", ":"), ensure_ascii=False)
     print(f"db.json: {len(out)} carte, {missing} immagini mancanti, {os.path.getsize(dst)/1e6:.1f} MB")
 
