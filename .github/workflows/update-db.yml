@@ -1,8 +1,8 @@
 name: Aggiorna database carte e prezzi
-# Ogni lunedi' (o a mano da Actions -> Run workflow): carte nuove + prezzi freschi, poi Pages si ridistribuisce da solo.
+# Ogni mattina alle 06:00 UTC (o a mano da Actions -> Run workflow): carte nuove + prezzi del giorno, poi Pages si ridistribuisce da solo.
 on:
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * *"
   workflow_dispatch:
 permissions:
   contents: write

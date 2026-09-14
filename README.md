@@ -22,7 +22,7 @@ alla schermata Home. Tutto il riconoscimento gira sul telefono.
    dell'intera carta) e scrive `docs/db.json` (~3,4 MB; per carta anche attributo e livello, usati dalla
    cornice dello scanner). Fuori dal database: solo le carte Rush Duel
    (gioco separato, non presente nell'API).
-   **Aggiornamento automatico:** `.github/workflows/update-db.yml` rilancia la build ogni lunedì su GitHub
+   **Aggiornamento automatico:** `.github/workflows/update-db.yml` rilancia la build ogni mattina su GitHub
    (riusa gli hash esistenti, scarica solo le immagini nuove) e pubblica carte nuove + prezzi freschi.
 2. `docs/index.html` legge il db, apre la camera e ~10 volte al secondo ritaglia il riquadro guida,
    prova una griglia di posizioni/scale (75 + 27 di raffinamento), calcola l'hash dell'illustrazione e

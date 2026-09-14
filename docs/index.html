@@ -69,6 +69,7 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}
 .port small{display:block;color:#8fe6f7;font-size:11px}
 #pval{display:block;font-size:26px;font-weight:800;color:#e9fdff;text-shadow:0 0 10px rgba(0,229,255,.6);line-height:1.1}
 #pdelta{display:block;font-size:12px;font-weight:700;margin-top:2px}
+#psplit{font-size:10.5px;color:#8fe6f7;margin-top:1px}#psplit b{color:#d9f9ff}
 .up{color:#3ddc97}.down{color:#ff5c6a}.flat{color:#8fe6f7}
 .ranges{display:flex;gap:4px;flex:none}
 .ranges button{background:transparent;border:1px solid rgba(0,229,255,.4);color:#bff8ff;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:700}
@@ -146,10 +147,10 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <span><button class="pill dark" id="addname">Aggiungi per nome</button> <button class="pill dark" id="csv">Copia CSV</button> <button class="pill dark" id="clear">Svuota</button></span>
   </header>
   <div class="port">
-    <div class="port-top"><div><small>Valore dell'album</small><b id="pval">0,00 €</b><span id="pdelta" class="flat"></span></div>
+    <div class="port-top"><div><small>Valore dell'album</small><b id="pval">0,00 €</b><span id="pdelta" class="flat"></span><small id="psplit"></small></div>
       <div class="ranges"><button data-r="7">7G</button><button data-r="30" class="on">30G</button><button data-r="0">Tutto</button></div></div>
     <svg id="chart" viewBox="0 0 320 110" preserveAspectRatio="none" aria-label="andamento del valore dell'album"></svg>
-    <small class="chnote">curva levigata, un punto al giorno · i prezzi si aggiornano ogni lunedì, il valore sale quando aggiungi carte</small>
+    <small class="chnote">curva levigata, un punto al giorno · prezzi aggiornati ogni mattina · i segni ▲ +1 sono le carte che hai aggiunto quel giorno</small>
     <div id="lsum"></div>
     <div class="mv"><h4>LE PIÙ PREZIOSE</h4><div id="mvlist"></div></div>
   </div>
@@ -373,9 +374,12 @@ $('#csv').onclick=async()=>{const rows=[['nome','nome_inglese','id','stampa','ra
   try{await navigator.clipboard.writeText(txt);toast('Album copiato negli appunti (CSV)');}catch(e){prompt('Copia il CSV:',txt);}};
 // ---- valore dell'album nel tempo: un punto ogni volta che il totale cambia (carte aggiunte/tolte, prezzi aggiornati)
 let hist=[],range=30;try{hist=JSON.parse(localStorage.getItem('hist')||'[]');range=+(localStorage.getItem('range')||30);}catch(e){}
-function snapshot(e){const last=hist[hist.length-1];if(last&&Math.abs(last[1]-e)<0.005)return;
-  hist.push([Date.now(),Math.round(e*100)/100]);if(hist.length>2000)hist=hist.filter((_,i)=>i%2===0||i===hist.length-1);
-  try{localStorage.setItem('hist',JSON.stringify(hist));}catch(e){}}
+function snapshot(e){const last=hist[hist.length-1],built=DB?DB.built:'';           // punto = [quando, valore, n carte, data prezzi]
+  if(last&&Math.abs(last[1]-e)<0.005){if(built&&last[3]!==built){last[3]=built;try{localStorage.setItem('hist',JSON.stringify(hist));}catch(x){}}return;}
+  let t=Date.now();                                                                  // prezzi nuovi visti in ritardo: il punto va nel giorno dell'aggiornamento, non oggi
+  if(last&&built&&last[3]&&last[3]!==built&&last[2]===scans.length){const tb=Date.parse(built+'T08:00:00Z');if(tb>last[0]&&tb<t)t=tb;}
+  hist.push([t,Math.round(e*100)/100,scans.length,built]);if(hist.length>2000)hist=hist.filter((_,i)=>i%2===0||i===hist.length-1);
+  try{localStorage.setItem('hist',JSON.stringify(hist));}catch(x){}}
 function chart(e){const now=Date.now(),day=864e5,from=range?now-range*day:(hist[0]?Math.min(hist[0][0],now-day):now-day);
   const at=t=>{let v=0;for(const p of hist){if(p[0]<=t)v=p[1];else break;}return v;};      // valore dell'album in un istante (0 prima del primo punto)
   const n=Math.max(2,Math.min(60,Math.round((now-from)/day))),pts=[];                     // un punto al giorno (fino a 60 per "tutto")
@@ -387,12 +391,17 @@ function chart(e){const now=Date.now(),day=864e5,from=range?now-range*day:(hist[
   for(let i=0;i<P.length-1;i++){const p0=P[i-1]||P[i],p1=P[i],p2=P[i+1],p3=P[i+2]||p2;
     d+=` C${(p1[0]+(p2[0]-p0[0])/6).toFixed(1)} ${f(p1[1]+(p2[1]-p0[1])/6)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(1)} ${f(p2[1]-(p3[1]-p1[1])/6)} ${p2[0].toFixed(1)} ${f(p2[1])}`;}
   const L=P[P.length-1];
+  const ev={};for(let i=1;i<hist.length;i++){const a=hist[i-1],b=hist[i];if(b[0]<from||b[2]==null||a[2]==null)continue;const k=b[2]-a[2];if(k){const dk=Math.floor((b[0]-from)/day);ev[dk]=(ev[dk]||0)+k;}}   // carte aggiunte/tolte per giorno
+  const marks=Object.entries(ev).map(([dk,k])=>{const x=(4+312*Math.min(now-from,(+dk+.5)*day)/Math.max(1,now-from)).toFixed(1),col=k>0?'#ffb300':'#00e5ff';
+    return`<path d="M${x} 109 l-4 -6 h8 z" fill="${col}"/><text x="${x}" y="99" font-size="8" font-weight="700" fill="${col}" text-anchor="middle">${k>0?'+':''}${k}</text>`;}).join('');
   $('#chart').innerHTML=`<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00e5ff" stop-opacity=".38"/><stop offset="1" stop-color="#ffb300" stop-opacity="0"/></linearGradient>
     <linearGradient id="sg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#00e5ff"/><stop offset="1" stop-color="#ffb300"/></linearGradient>
     <filter id="gl" x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
     <path d="${d} L${L[0].toFixed(1)} 110 L4 110 Z" fill="url(#g)"/><path d="${d}" fill="none" stroke="url(#sg)" stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke" filter="url(#gl)"/>
-    <circle cx="${L[0].toFixed(1)}" cy="${f(L[1])}" r="4" fill="#ffb300" filter="url(#gl)"/>`;
+    <circle cx="${L[0].toFixed(1)}" cy="${f(L[1])}" r="4" fill="#ffb300" filter="url(#gl)"/>${marks}`;
   const dl=e-pts[0][1],el=$('#pdelta');el.className=dl>0.005?'up':dl<-0.005?'down':'flat';
+  const added=scans.filter(s=>s.t>=from&&s.v0!=null).reduce((a,s)=>a+s.v0,0),mkt=dl-added,sg=v=>(v>=0?'+':'')+eur.format(v);   // quanto viene dalle carte aggiunte e quanto dal mercato
+  $('#psplit').innerHTML=scans.length?`di cui carte aggiunte <b>${sg(added)}</b> · mercato <b class="${mkt>0.005?'up':mkt<-0.005?'down':'flat'}">${sg(mkt)}</b>`:'';
   el.textContent=`${dl>=0?'+':''}${eur.format(dl)} ${range?'negli ultimi '+range+' giorni':'da quando usi l\'album'}`;}
 function mostValuable(){const rows=scans.map((s,i)=>({s,i,v:valueOf(s)})).filter(r=>r.v.p.c).sort((a,b)=>b.v.eur-a.v.eur).slice(0,5);
   $('#mvlist').innerHTML=rows.length?rows.map(r=>`<div class="mvrow"><span>${esc(nm(r.v.p.c))}${r.v.p.set?' · '+esc(r.v.p.set[0])+' '+esc(r.v.p.set[1]):''}</span><b>${r.v.approx?'≈ ':''}${eur.format(r.v.eur)}</b></div>`).join(''):'<div class="mvrow"><span>Nessuna carta ancora</span></div>';}
