@@ -77,6 +77,7 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}
 .pocket.empty{cursor:default;border-style:dashed;border-color:rgba(255,255,255,.14)}
 .pocket.empty .noimg{background:transparent}
 .pocket .r{position:absolute;top:8px;left:8px;background:var(--acc2);color:#08101a;border-radius:999px;padding:1px 5px;font-size:9px;font-weight:800}
+.pocket .r.art{left:auto;right:8px;background:var(--cyan)}
 .pocket b{display:block;margin-top:4px;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e9fdff}
 .pocket .p{display:block;color:var(--acc2);font-weight:800;font-size:11px}
 .noimg{width:100%;aspect-ratio:59/86;border-radius:4px;background:#2a2f3d;color:#bff8ff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9px;font-weight:700;padding:4px}
@@ -94,7 +95,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 .box{background:#0f1524;color:#e9fdff;border:1px solid rgba(0,229,255,.5);border-radius:16px;padding:20px;max-width:440px;width:100%}
 .box h2{margin:0 0 10px;font-size:20px;color:#bff8ff}.box ol{padding-left:20px;margin:0 0 12px;line-height:1.5}.box li{margin-bottom:6px}
 .box .note{font-size:13px;color:#8fe6f7;margin:0 0 14px;line-height:1.4}
-#toast{position:fixed;left:50%;transform:translateX(-50%);top:42%;background:rgba(20,20,26,.94);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;max-width:88vw;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9;border:1px solid rgba(0,229,255,.4)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);top:28%;background:rgba(20,20,26,.94);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;max-width:88vw;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9;border:1px solid rgba(0,229,255,.4)}
 #toast.show{opacity:1}
 </style>
 </head>
@@ -128,7 +129,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <span><button class="pill dark" id="addname">Aggiungi per nome</button> <button class="pill dark" id="csv">Copia CSV</button> <button class="pill dark" id="clear">Svuota</button></span>
   </header>
   <div id="lsum"></div>
-  <div id="lhelp">Tocca una tasca per vedere la foto, scegliere la stampa (set e rarità) o togliere la carta. Prezzo in €: minimo Cardmarket della carta. Se scegli tu la stampa, la tasca mostra il prezzo TCGplayer in $ di quella stampa. Puoi ingrandire con due dita.</div>
+  <div id="lhelp">Tocca una tasca per vedere la foto, scegliere la stampa (set e rarità) o togliere la carta. Prezzo: minimo Cardmarket della carta; se scegli tu la stampa, il prezzo TCGplayer di quella stampa convertito in euro (con "≈"). Puoi ingrandire con due dita.</div>
   <div id="pages"></div>
 </div>
 <div id="help" hidden>
@@ -248,9 +249,17 @@ function typeColor(t){t=(t||'').toLowerCase();
   if(t.includes('synchro'))return'#f4f4f4';if(t.includes('fusion'))return'#b28dff';if(t.includes('ritual'))return'#7fc8ff';if(t.includes('token'))return'#9aa0a6';
   if(t.includes('normal'))return'#f0c95a';return'#ff9a3c';}                      // effetto e altri mostri: arancione
 function priceOf(it){const c=card(it);if(!c)return{eur:0,usd:0,set:null,c:null};const set=c[5][it.si]||null;return{eur:c[3],usd:set?set[2]:c[4],set,c};}
+let RATE=0.86,RATE_LIVE=false;                    // cambio $ -> €: valore stimato, poi aggiornato dal cambio del giorno (CDN gratis, con riserva)
+const gotRate=v=>{if(v>0&&v<3){RATE=v;RATE_LIVE=true;if(DB)render();}};
+fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json').then(r=>r.json()).then(j=>gotRate(j.usd.eur))
+  .catch(()=>fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR').then(r=>r.json()).then(j=>gotRate(j.rates.EUR)).catch(()=>{}));
+function valueOf(it){const p=priceOf(it),ch=!!(it.manual&&p.set&&p.usd>0);return{eur:ch?p.usd*RATE:p.eur,approx:ch,usd:p.usd,p};}   // stampa scelta a mano: TCGplayer convertito; altrimenti minimo Cardmarket
+const rateNote=()=>`cambio ${RATE.toFixed(2)} €/$ ${RATE_LIVE?'di oggi':'stimato'}`;
+function artOf(it){const c=card(it);if(!c||c[6].length<2)return'';const k=c[6].findIndex(im=>im[0]===it.img);return k<0?`${c[6].length} illustrazioni`:`Illustrazione ${k+1} di ${c[6].length}`;}
+const setOrder=c=>c[5].map((s,k)=>k).sort((a,b)=>((c[5][b][2]>0)-(c[5][a][2]>0))||(c[5][b][2]-c[5][a][2])||c[5][a][0].localeCompare(c[5][b][0]));   // prima le stampe con prezzo, dalla piu' cara
 function addScan(ci,b){const c=DB.cards[ci],sets=c[5];let si=0,best=1e9;sets.forEach((s,i)=>{if(s[2]>0&&s[2]<best){best=s[2];si=i;}});   // default: stampa piu' economica (prudente)
   const thumb=b?thumbOf(b):'';
-  scans.push({id:c[0],si,thumb,t:Date.now()});if(scans.length>200)scans.shift();
+  scans.push({id:c[0],si,thumb,t:Date.now(),img:b?IMGID[b.k]:0});if(scans.length>200)scans.shift();   // img = illustrazione riconosciuta (le carte con piu' disegni sono 124)
   save();render();coin();if(navigator.vibrate&&navigator.userActivation&&navigator.userActivation.hasBeenActive)navigator.vibrate(30);
   showCard(scans.length-1);if(b){$('#art').classList.add('lock');}else toast('Aggiunta all\'album: '+nm(c));}
 const thumbHtml=(s,name)=>s.thumb?`<img src="${s.thumb}" alt="">`:`<div class="noimg">${esc(name)}</div>`;
@@ -259,28 +268,32 @@ function showCard(i){const it=scans[i],p=priceOf(it),c=p.c;if(!c)return;const t=
   $('#nmbar').classList.remove('idle');$('#nm').textContent=nm(c);
   $('#attr').textContent=c[8]?(ATTR_IT[c[8]]||c[8]):(t.includes('Spell')?'MAGIA':t.includes('Trap')?'TRAP':'?');
   const lvl=c[9]||0;$('#stars').classList.remove('dim');$('#stars').textContent=lvl?(t.includes('Link')?'LINK-'+lvl:'★'.repeat(Math.min(lvl,13))):typeIt(t).toUpperCase();
-  const chosen=!!(it.manual&&p.set&&p.usd>0);                       // stampa scelta a mano: il prezzo grande e' quello della stampa (TCGplayer)
-  const main=chosen?usd.format(p.usd):(p.eur>0?eur.format(p.eur):(p.usd>0?usd.format(p.usd):'prezzo n.d.'));
-  $('#price').innerHTML=`${main}<small>${chosen?'TCGplayer · stampa '+esc(p.set[0])+' '+esc(p.set[1])+' · tocca per cambiare':(p.eur>0?'minimo Cardmarket':'TCGplayer')+' · '+c[5].length+' stampe · tocca per scegliere la stampa'}</small>`;
+  const chosen=!!(it.manual&&p.set&&p.usd>0);                       // stampa scelta a mano: il prezzo grande e' quello della stampa (TCGplayer convertito in €)
+  const main=chosen?'≈ '+eur.format(p.usd*RATE):(p.eur>0?eur.format(p.eur):(p.usd>0?usd.format(p.usd):'prezzo n.d.'));
+  $('#price').innerHTML=`${main}<small>${chosen?usd.format(p.usd)+' TCGplayer · stampa '+esc(p.set[0])+' '+esc(p.set[1])+' · tocca per cambiare':(p.eur>0?'minimo Cardmarket':'TCGplayer')+' · '+c[5].length+' stampe · tocca per scegliere la stampa'}</small>`;
   $('#price').onclick=()=>openPick(i);clearTimeout(priceTimer);priceTimer=setTimeout(()=>{$('#price').innerHTML='';},8000);
   $('#ttitle').textContent='['+typeIt(t)+']';
-  $('#ttext').innerHTML=chosen
-    ?`${en(c)?esc(en(c))+' · ':''}stampa scelta ${esc(p.set[0])} (${esc(p.set[1])}): TCGplayer ${usd.format(p.usd)}. Su Cardmarket la carta parte da ${c[3]>0?eur.format(c[3]):'n.d.'} (minimo tra ${c[5].length} stampe).`
-    :`${en(c)?esc(en(c))+' · ':''}${p.set?'stampa più economica '+esc(p.set[0])+' ('+esc(p.set[1])+') · TCGplayer '+usd.format(p.usd):'nessuna stampa nota'}${c[3]>0?' · minimo Cardmarket '+eur.format(c[3]):''}. Se la tua è un'altra stampa, tocca il prezzo e scegliila.`;
+  const art=artOf(it);
+  $('#ttext').innerHTML=(art?art+' · ':'')+(chosen
+    ?`${en(c)?esc(en(c))+' · ':''}stampa scelta ${esc(p.set[0])} (${esc(p.set[1])}): TCGplayer ${usd.format(p.usd)} ≈ ${eur.format(p.usd*RATE)} (${rateNote()}). Su Cardmarket la carta parte da ${c[3]>0?eur.format(c[3]):'n.d.'} (minimo tra ${c[5].length} stampe).`
+    :`${en(c)?esc(en(c))+' · ':''}${p.set?'stampa più economica '+esc(p.set[0])+' ('+esc(p.set[1])+') · TCGplayer '+usd.format(p.usd):'nessuna stampa nota'}${c[3]>0?' · minimo Cardmarket '+eur.format(c[3]):''}. Se la tua è un'altra stampa, tocca il prezzo e scegliila.`);
   if(!DEBUG)status('Riconosciuta ✓ '+(p.set?p.set[0]:''));}
 function render(){const n=scans.length;$('#organize').textContent=`Organizza (${n})`;
   $('#stack').innerHTML=scans.slice(-3).map(s=>thumbHtml(s,card(s)?nm(card(s)):'?')).join('')+(n?`<span class="n">${n}</span>`:'');
-  let e=0,u=0;scans.forEach(s=>{const p=priceOf(s);e+=p.eur;u+=p.usd;});
-  $('#cnt').textContent=`CARTE/ ${n}`;$('#tot').textContent=`TOTALE/ ${eur.format(e)}`;$('#tot2').textContent=n?`TCGplayer, stampe scelte: ${usd.format(u)}`:'';
-  $('#ltitle').textContent=`Album · ${n} carte`;$('#lsum').innerHTML=n?`Totale <b>${eur.format(e)}</b> (minimo Cardmarket) · <b>${usd.format(u)}</b> (TCGplayer, stampe scelte)`:'';
+  let e=0,u=0,ap=false;scans.forEach(s=>{const v=valueOf(s);e+=v.eur;u+=v.usd;ap=ap||v.approx;});
+  const how=ap?`stampe scelte da te al valore TCGplayer (${rateNote()}), le altre al minimo Cardmarket`:'minimo Cardmarket';
+  $('#cnt').textContent=`CARTE/ ${n}`;$('#tot').textContent=`TOTALE/ ${ap?'≈ ':''}${eur.format(e)}`;$('#tot2').textContent=n?`${how} · TCGplayer, stampe scelte: ${usd.format(u)}`:'';
+  $('#ltitle').textContent=`Album · ${n} carte`;$('#lsum').innerHTML=n?`Totale <b>${ap?'≈ ':''}${eur.format(e)}</b> (${how}) · <b>${usd.format(u)}</b> (TCGplayer, stampe scelte)`:'';
   const items=scans.map((s,i)=>({s,i})).reverse(),pages=[];for(let k=0;k<Math.max(1,Math.ceil(items.length/9));k++)pages.push(items.slice(k*9,k*9+9));
   $('#pages').innerHTML=pages.map((pg,k)=>`<div class="album"><div class="rings"><span></span><span></span><span></span></div><h3>PAGINA ${k+1} · ${pg.length}/9 TASCHE</h3><div class="pockets">${
     pg.map(({s,i})=>{const p=priceOf(s);if(!p.c)return'';const ch=!!(s.manual&&p.set&&p.usd>0);
-      return`<div class="pocket" data-i="${i}">${thumbHtml(s,nm(p.c))}<span class="r">${esc(p.set?p.set[1]:'?')}</span><b>${esc(nm(p.c))}</b><span class="p">${ch?usd.format(p.usd):(p.eur>0?eur.format(p.eur):'—')}</span></div>`;}).join('')
+      const art=artOf(s),ak=art?art.replace(/Illustrazione (\d+) di (\d+)/,'$1/$2').replace(' illustrazioni','?'):'';
+      return`<div class="pocket" data-i="${i}">${thumbHtml(s,nm(p.c))}<span class="r">${esc(p.set?p.set[1]:'?')}</span>${ak?`<span class="r art" title="${esc(art)}">${esc(ak)}</span>`:''}<b>${esc(nm(p.c))}</b><span class="p">${ch?'≈ '+eur.format(p.usd*RATE):(p.eur>0?eur.format(p.eur):'—')}</span></div>`;}).join('')
     +('<div class="pocket empty"><div class="noimg">'+(pg.length?'':'vuoto: torna allo scanner o usa "Aggiungi per nome"')+'</div></div>').repeat(9-pg.length)}</div></div>`).join('');}
 function openPick(i){const it=scans[i],c=card(it);if(!c)return;const d=$('#pick');
-  d.innerHTML=`<div class="ph"><div><b>${esc(nm(c))}</b><small>${en(c)?esc(en(c))+' · ':''}${esc(typeIt(c[2]))} · minimo Cardmarket ${c[3]>0?eur.format(c[3]):'n.d.'}<br>Scegli la stampa: codice set · rarità · prezzo TCGplayer</small></div>${it.thumb?`<img src="${it.thumb}" alt="">`:''}</div>
-  <div class="sets">${c[5].map((s,k)=>`<button class="set${k===it.si?' on':''}" data-k="${k}"><span>${esc(s[0])}</span><em>${esc(s[1])}</em><b>${s[2]>0?usd.format(s[2]):'—'}</b></button>`).join('')||'<p style="padding:0 8px">Nessuna stampa nota per questa carta.</p>'}</div>
+  const art=artOf(it);
+  d.innerHTML=`<div class="ph"><div><b>${esc(nm(c))}</b><small>${en(c)?esc(en(c))+' · ':''}${esc(typeIt(c[2]))} · minimo Cardmarket ${c[3]>0?eur.format(c[3]):'n.d.'}${art?'<br>'+esc(art)+' (il database non dice quale stampa usa quale disegno: le stampe elencate valgono per tutte)':''}<br>Scegli la stampa: codice set · rarità · prezzo TCGplayer, dalla più cara</small></div>${it.thumb?`<img src="${it.thumb}" alt="">`:''}</div>
+  <div class="sets">${setOrder(c).map(k=>{const s=c[5][k];return`<button class="set${k===it.si?' on':''}" data-k="${k}"><span>${esc(s[0])}</span><em>${esc(s[1])}</em><b>${s[2]>0?usd.format(s[2]):'—'}</b></button>`;}).join('')||'<p style="padding:0 8px">Nessuna stampa nota per questa carta.</p>'}</div>
   <div class="pf"><button class="pill dark" id="rm">Togli dall'album</button><button class="pill acc" id="ok">Chiudi</button></div>`;
   d.querySelectorAll('.set').forEach(b=>b.onclick=()=>{it.si=+b.dataset.k;it.manual=true;save();render();if(i===scans.length-1)showCard(i);
     const s=c[5][it.si];toast(`Stampa impostata: ${s[0]} ${s[1]} · ${s[2]>0?'TCGplayer '+usd.format(s[2]):'prezzo TCGplayer non disponibile'}`);d.close();});
