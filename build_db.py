@@ -129,9 +129,9 @@ def main():
         name_it = names_it.get(c["id"], "")
         out.append([c["id"], c["name"], c.get("humanReadableCardType", c.get("type", "")),
                     float(pr.get("cardmarket_price") or 0), float(pr.get("tcgplayer_price") or 0), sets, imgs,
-                    name_it if name_it != c["name"] else ""])
-    db = {"v": 2, "built": time.strftime("%Y-%m-%d"), "n": len(out),
-          "fields": "id,name,type,cardmarket_eur,tcgplayer_usd,sets[[code,rarity,usd]],images[[id,dhash,phash,arthash]],name_it",
+                    name_it if name_it != c["name"] else "", c.get("attribute", "") or "", int(c.get("level") or c.get("linkval") or 0)])
+    db = {"v": 3, "built": time.strftime("%Y-%m-%d"), "n": len(out),
+          "fields": "id,name,type,cardmarket_eur,tcgplayer_usd,sets[[code,rarity,usd]],images[[id,dhash,phash,arthash]],name_it,attribute,level",
           "cards": out}
     json.dump(db, open(dst, "w", encoding="utf-8"), separators=(",", ":"), ensure_ascii=False)
     print(f"db.json: {len(out)} carte, {missing} immagini mancanti, {os.path.getsize(dst)/1e6:.1f} MB")
