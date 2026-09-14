@@ -1,9 +1,13 @@
 # YGO Scan — valore delle carte Yu-Gi-Oh! dalla camera del telefono
 
 App web (PWA) ispirata allo scanner Pokémon "Acorn TCG" (analisi del video: `ANALISI-VIDEO.md`):
-inquadri una carta nel riquadro, in meno di mezzo secondo compare il prezzo sopra la carta, la
-miniatura entra nella pila in basso a sinistra, il totale si aggiorna. "Organizza" mostra la griglia
-delle carte scansionate con la stampa scelta e i prezzi; da lì si cambia stampa, si rimuove, si copia il CSV.
+inquadri una carta nel riquadro, in meno di mezzo secondo compare il prezzo sopra la carta, suona la
+monetina, la miniatura entra nella pila e il totale si aggiorna. Design "carta olografica": tutto lo
+schermo è una carta Yu-Gi-Oh di vetro sopra una griglia in prospettiva; la camera vive nel riquadro
+dell'illustrazione, la barra del nome, le stelle (livello), l'attributo e il colore del bordo prendono
+i dati della carta riconosciuta (arancione mostro effetto, oro normale, verde magia, viola trappola...).
+"Organizza" è un album da collezione con tasche 3×3: tocca una tasca per vedere la foto, cambiare
+stampa (set e rarità) o togliere la carta; "Copia CSV" esporta.
 
 Nessun server, nessuna app da installare dagli store: si apre nel browser del telefono e si aggiunge
 alla schermata Home. Tutto il riconoscimento gira sul telefono.
@@ -15,7 +19,8 @@ alla schermata Home. Tutto il riconoscimento gira sul telefono.
    alternative comprese; nomi inglesi e italiani; prezzi Cardmarket € e TCGplayer $; stampe con codice set
    e rarità) e le immagini piccole delle carte in `data/small/` (policy YGOPRODeck: scaricare e ri-ospitare,
    mai hotlink). Per ogni immagine calcola tre hash percettivi (pHash dell'illustrazione, pHash e dHash
-   dell'intera carta) e scrive `docs/db.json` (~3,3 MB). Fuori dal database: solo le carte Rush Duel
+   dell'intera carta) e scrive `docs/db.json` (~3,4 MB; per carta anche attributo e livello, usati dalla
+   cornice dello scanner). Fuori dal database: solo le carte Rush Duel
    (gioco separato, non presente nell'API).
    **Aggiornamento automatico:** `.github/workflows/update-db.yml` rilancia la build ogni lunedì su GitHub
    (riusa gli hash esistenti, scarica solo le immagini nuove) e pubblica carte nuove + prezzi freschi.
