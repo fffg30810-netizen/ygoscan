@@ -62,8 +62,24 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}
 #list{position:fixed;inset:0;background:#0b0e16;color:#e9fdff;overflow:auto;padding:calc(10px + env(safe-area-inset-top,0)) 10px 40px}
 #list header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px}
 #list header b{font-size:16px;color:#bff8ff;text-shadow:0 0 8px rgba(0,229,255,.6)}
-#lsum{color:#d9f9ff;margin:4px 2px 2px;font-size:13px}
 #lhelp{color:#8fe6f7;margin:0 2px 10px;font-size:12px;line-height:1.35}
+/* valore dell'album: grafico + piu' preziose */
+.port{position:relative;background:rgba(0,229,255,.05);border:1px solid rgba(0,229,255,.4);border-radius:12px;padding:10px 12px 8px;margin:0 0 12px}
+.port-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.port small{display:block;color:#8fe6f7;font-size:11px}
+#pval{display:block;font-size:26px;font-weight:800;color:#e9fdff;text-shadow:0 0 10px rgba(0,229,255,.6);line-height:1.1}
+#pdelta{display:block;font-size:12px;font-weight:700;margin-top:2px}
+.up{color:#3ddc97}.down{color:#ff5c6a}.flat{color:#8fe6f7}
+.ranges{display:flex;gap:4px;flex:none}
+.ranges button{background:transparent;border:1px solid rgba(0,229,255,.4);color:#bff8ff;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:700}
+.ranges button.on{background:var(--acc2);color:#08101a;border-color:var(--acc2)}
+#chart{display:block;width:100%;height:110px;margin:8px 0 4px}
+#lsum{font-size:11px;color:#8fe6f7;margin:0 0 6px;line-height:1.35}
+.mv h4{margin:6px 0 2px;font:600 11px Consolas,"Courier New",monospace;color:#8fe6f7;letter-spacing:1px}
+.mvrow{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:4px 0;border-top:1px solid rgba(0,229,255,.15)}
+.mvrow span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mvrow b{color:var(--acc2);flex:none}
+.pocket .d{font-size:9px;font-weight:700;margin-left:3px}
 .album{position:relative;margin:0 0 14px;padding:12px 10px 12px 28px;border-radius:12px;background:linear-gradient(160deg,#1a2238,#111726 60%,#0d1220);border:1px solid rgba(255,179,0,.35);box-shadow:inset 0 0 40px rgba(0,0,0,.55),0 6px 18px rgba(0,0,0,.5)}
 .album::before{content:"";position:absolute;inset:0;border-radius:12px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.025) 0 2px,transparent 2px 7px);pointer-events:none}
 .album h3{margin:0 0 8px;font:600 11px Consolas,"Courier New",monospace;color:#8fe6f7;letter-spacing:1px}
@@ -128,8 +144,14 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <button class="pill dark" id="back">‹ Scanner</button><b id="ltitle">Album · 0 carte</b>
     <span><button class="pill dark" id="addname">Aggiungi per nome</button> <button class="pill dark" id="csv">Copia CSV</button> <button class="pill dark" id="clear">Svuota</button></span>
   </header>
-  <div id="lsum"></div>
-  <div id="lhelp">Tocca una tasca per vedere la foto, scegliere la stampa (set e rarità) o togliere la carta. Prezzo: minimo Cardmarket della carta; se scegli tu la stampa, il prezzo TCGplayer di quella stampa convertito in euro (con "≈"). Puoi ingrandire con due dita.</div>
+  <div class="port">
+    <div class="port-top"><div><small>Valore dell'album</small><b id="pval">0,00 €</b><span id="pdelta" class="flat"></span></div>
+      <div class="ranges"><button data-r="7">7G</button><button data-r="30" class="on">30G</button><button data-r="0">Tutto</button></div></div>
+    <svg id="chart" viewBox="0 0 320 110" preserveAspectRatio="none" aria-label="andamento del valore dell'album"></svg>
+    <div id="lsum"></div>
+    <div class="mv"><h4>LE PIÙ PREZIOSE</h4><div id="mvlist"></div></div>
+  </div>
+  <div id="lhelp">Tocca una tasca per vedere la foto, scegliere la stampa (set e rarità) o togliere la carta. Prezzo: minimo Cardmarket della carta; se scegli tu la stampa, il prezzo TCGplayer di quella stampa convertito in euro (con "≈"). Le frecce ▲▼ dicono se il valore è salito o sceso da quando hai scansionato la carta. Puoi ingrandire con due dita.</div>
   <div id="pages"></div>
 </div>
 <div id="help" hidden>
@@ -191,11 +213,11 @@ function phashBits(s){const R=new Float32Array(32*8);
 
 // ---- acquisizione: disegna guida+margine della sorgente nel canvas di lavoro e restituisce i grigi
 let lastSrc=null,lastG=null;                      // ultima sorgente e riquadro usati: servono per la miniatura ad alta risoluzione
-function thumbOf(b){const g=lastG,mx=g.w*M,my=g.h*M,kx=(g.w+2*mx)/WW,ky=(g.h+2*my)/WH,pad=.05;
-  const th=document.createElement('canvas');th.width=180;th.height=262;const c=th.getContext('2d');c.fillStyle='#222';c.fillRect(0,0,180,262);
-  try{c.drawImage(lastSrc,g.x-mx+(b.x0-b.w*pad)*kx,g.y-my+(b.y0-b.h*pad)*ky,b.w*(1+2*pad)*kx,b.h*(1+2*pad)*ky,0,0,180,262);}
-  catch(e){c.drawImage(work,b.x0,b.y0,b.w,b.h,0,0,180,262);}
-  return th.toDataURL('image/jpeg',.7);}
+function thumbOf(b){const g=lastG,mx=g.w*M,my=g.h*M,kx=(g.w+2*mx)/WW,ky=(g.h+2*my)/WH,pad=.05,TW=150,TH=218;   // ~10 KB: ~500 foto nella memoria del browser
+  const th=document.createElement('canvas');th.width=TW;th.height=TH;const c=th.getContext('2d');c.fillStyle='#222';c.fillRect(0,0,TW,TH);
+  try{c.drawImage(lastSrc,g.x-mx+(b.x0-b.w*pad)*kx,g.y-my+(b.y0-b.h*pad)*ky,b.w*(1+2*pad)*kx,b.h*(1+2*pad)*ky,0,0,TW,TH);}
+  catch(e){c.drawImage(work,b.x0,b.y0,b.w,b.h,0,0,TW,TH);}
+  return th.toDataURL('image/jpeg',.65);}
 function grab(src,g){lastSrc=src;lastG=g;const mx=g.w*M,my=g.h*M;wctx.fillStyle='#000';wctx.fillRect(0,0,WW,WH);
   wctx.drawImage(src,g.x-mx,g.y-my,g.w+2*mx,g.h+2*my,0,0,WW,WH);
   const d=wctx.getImageData(0,0,WW,WH).data,gr=new Float32Array(WW*WH);
@@ -259,7 +281,8 @@ function artOf(it){const c=card(it);if(!c||c[6].length<2)return'';const k=c[6].f
 const setOrder=c=>c[5].map((s,k)=>k).sort((a,b)=>((c[5][b][2]>0)-(c[5][a][2]>0))||(c[5][b][2]-c[5][a][2])||c[5][a][0].localeCompare(c[5][b][0]));   // prima le stampe con prezzo, dalla piu' cara
 function addScan(ci,b){const c=DB.cards[ci],sets=c[5];let si=0,best=1e9;sets.forEach((s,i)=>{if(s[2]>0&&s[2]<best){best=s[2];si=i;}});   // default: stampa piu' economica (prudente)
   const thumb=b?thumbOf(b):'';
-  scans.push({id:c[0],si,thumb,t:Date.now(),img:b?IMGID[b.k]:0});if(scans.length>200)scans.shift();   // img = illustrazione riconosciuta (le carte con piu' disegni sono 124)
+  scans.push({id:c[0],si,thumb,t:Date.now(),img:b?IMGID[b.k]:0});     // img = illustrazione riconosciuta (le carte con piu' disegni sono 124); nessun tetto di carte
+  const last=scans[scans.length-1];last.v0=Math.round(valueOf(last).eur*100)/100;   // valore alla scansione: base per "sale/scende"
   save();render();coin();if(navigator.vibrate&&navigator.userActivation&&navigator.userActivation.hasBeenActive)navigator.vibrate(30);
   showCard(scans.length-1);if(b){$('#art').classList.add('lock');}else toast('Aggiunta all\'album: '+nm(c));}
 const thumbHtml=(s,name)=>s.thumb?`<img src="${s.thumb}" alt="">`:`<div class="noimg">${esc(name)}</div>`;
@@ -280,22 +303,25 @@ function showCard(i){const it=scans[i],p=priceOf(it),c=p.c;if(!c)return;const t=
   if(!DEBUG)status('Riconosciuta ✓ '+(p.set?p.set[0]:''));}
 function render(){const n=scans.length;$('#organize').textContent=`Organizza (${n})`;
   $('#stack').innerHTML=scans.slice(-3).map(s=>thumbHtml(s,card(s)?nm(card(s)):'?')).join('')+(n?`<span class="n">${n}</span>`:'');
-  let e=0,u=0,ap=false;scans.forEach(s=>{const v=valueOf(s);e+=v.eur;u+=v.usd;ap=ap||v.approx;});
+  let e=0,u=0,ap=false,ds=0,nds=0;scans.forEach(s=>{const v=valueOf(s);e+=v.eur;u+=v.usd;ap=ap||v.approx;if(s.v0!=null){ds+=v.eur-s.v0;nds++;}});
   const how=ap?`stampe scelte da te al valore TCGplayer (${rateNote()}), le altre al minimo Cardmarket`:'minimo Cardmarket';
   $('#cnt').textContent=`CARTE/ ${n}`;$('#tot').textContent=`TOTALE/ ${ap?'≈ ':''}${eur.format(e)}`;$('#tot2').textContent=n?`${how} · TCGplayer, stampe scelte: ${usd.format(u)}`:'';
-  $('#ltitle').textContent=`Album · ${n} carte`;$('#lsum').innerHTML=n?`Totale <b>${ap?'≈ ':''}${eur.format(e)}</b> (${how}) · <b>${usd.format(u)}</b> (TCGplayer, stampe scelte)`:'';
+  $('#ltitle').textContent=`Album · ${n} carte`;$('#pval').textContent=(ap?'≈ ':'')+eur.format(e);
+  $('#lsum').innerHTML=n?`${how} · TCGplayer, stampe scelte: <b>${usd.format(u)}</b>${nds?` · dalle scansioni: <b class="${ds>0.005?'up':ds<-0.005?'down':'flat'}">${ds>=0?'+':''}${eur.format(ds)}</b>`:''}`:'Aggiungi carte: qui vedrai quanto vale l\'album e come cambia quando i prezzi si aggiornano (ogni lunedì).';
+  if(DB){snapshot(e);chart(e);mostValuable();}
   const items=scans.map((s,i)=>({s,i})).reverse(),pages=[];for(let k=0;k<Math.max(1,Math.ceil(items.length/9));k++)pages.push(items.slice(k*9,k*9+9));
   $('#pages').innerHTML=pages.map((pg,k)=>`<div class="album"><div class="rings"><span></span><span></span><span></span></div><h3>PAGINA ${k+1} · ${pg.length}/9 TASCHE</h3><div class="pockets">${
     pg.map(({s,i})=>{const p=priceOf(s);if(!p.c)return'';const ch=!!(s.manual&&p.set&&p.usd>0);
       const art=artOf(s),ak=art?art.replace(/Illustrazione (\d+) di (\d+)/,'$1/$2').replace(' illustrazioni','?'):'';
-      return`<div class="pocket" data-i="${i}">${thumbHtml(s,nm(p.c))}<span class="r">${esc(p.set?p.set[1]:'?')}</span>${ak?`<span class="r art" title="${esc(art)}">${esc(ak)}</span>`:''}<b>${esc(nm(p.c))}</b><span class="p">${ch?'≈ '+eur.format(p.usd*RATE):(p.eur>0?eur.format(p.eur):'—')}</span></div>`;}).join('')
+      const v=valueOf(s),dl=s.v0!=null?v.eur-s.v0:0,dh=Math.abs(dl)>=0.01?`<span class="d ${dl>0?'up':'down'}">${dl>0?'▲':'▼'} ${eur.format(Math.abs(dl))}</span>`:'';
+      return`<div class="pocket" data-i="${i}">${thumbHtml(s,nm(p.c))}<span class="r">${esc(p.set?p.set[1]:'?')}</span>${ak?`<span class="r art" title="${esc(art)}">${esc(ak)}</span>`:''}<b>${esc(nm(p.c))}</b><span class="p">${ch?'≈ '+eur.format(p.usd*RATE):(p.eur>0?eur.format(p.eur):'—')}${dh}</span></div>`;}).join('')
     +('<div class="pocket empty"><div class="noimg">'+(pg.length?'':'vuoto: torna allo scanner o usa "Aggiungi per nome"')+'</div></div>').repeat(9-pg.length)}</div></div>`).join('');}
 function openPick(i){const it=scans[i],c=card(it);if(!c)return;const d=$('#pick');
-  const art=artOf(it);
-  d.innerHTML=`<div class="ph"><div><b>${esc(nm(c))}</b><small>${en(c)?esc(en(c))+' · ':''}${esc(typeIt(c[2]))} · minimo Cardmarket ${c[3]>0?eur.format(c[3]):'n.d.'}${art?'<br>'+esc(art)+' (il database non dice quale stampa usa quale disegno: le stampe elencate valgono per tutte)':''}<br>Scegli la stampa: codice set · rarità · prezzo TCGplayer, dalla più cara</small></div>${it.thumb?`<img src="${it.thumb}" alt="">`:''}</div>
+  const art=artOf(it),v=valueOf(it),dl=it.v0!=null?v.eur-it.v0:0;
+  d.innerHTML=`<div class="ph"><div><b>${esc(nm(c))}</b><small>${en(c)?esc(en(c))+' · ':''}${esc(typeIt(c[2]))} · minimo Cardmarket ${c[3]>0?eur.format(c[3]):'n.d.'}${art?'<br>'+esc(art)+' (il database non dice quale stampa usa quale disegno: le stampe elencate valgono per tutte)':''}${it.v0!=null?`<br>Valore alla scansione ${eur.format(it.v0)} → oggi ${v.approx?'≈ ':''}${eur.format(v.eur)} <b class="${dl>0.005?'up':dl<-0.005?'down':'flat'}">(${dl>=0?'+':''}${eur.format(dl)})</b>`:''}<br>Scegli la stampa: codice set · rarità · prezzo TCGplayer, dalla più cara</small></div>${it.thumb?`<img src="${it.thumb}" alt="">`:''}</div>
   <div class="sets">${setOrder(c).map(k=>{const s=c[5][k];return`<button class="set${k===it.si?' on':''}" data-k="${k}"><span>${esc(s[0])}</span><em>${esc(s[1])}</em><b>${s[2]>0?usd.format(s[2]):'—'}</b></button>`;}).join('')||'<p style="padding:0 8px">Nessuna stampa nota per questa carta.</p>'}</div>
   <div class="pf"><button class="pill dark" id="rm">Togli dall'album</button><button class="pill acc" id="ok">Chiudi</button></div>`;
-  d.querySelectorAll('.set').forEach(b=>b.onclick=()=>{it.si=+b.dataset.k;it.manual=true;save();render();if(i===scans.length-1)showCard(i);
+  d.querySelectorAll('.set').forEach(b=>b.onclick=()=>{it.si=+b.dataset.k;it.manual=true;it.v0=Math.round(valueOf(it).eur*100)/100;save();render();if(i===scans.length-1)showCard(i);   // nuova base: il cambio stampa non e' un movimento di prezzo
     const s=c[5][it.si];toast(`Stampa impostata: ${s[0]} ${s[1]} · ${s[2]>0?'TCGplayer '+usd.format(s[2]):'prezzo TCGplayer non disponibile'}`);d.close();});
   d.querySelector('#rm').onclick=()=>{scans.splice(i,1);save();render();d.close();};
   d.querySelector('#ok').onclick=()=>d.close();d.showModal();}
@@ -343,6 +369,24 @@ $('#csv').onclick=async()=>{const rows=[['nome','nome_inglese','id','stampa','ra
   scans.forEach(s=>{const p=priceOf(s);if(p.c)rows.push([nm(p.c),p.c[1],s.id,p.set?p.set[0]:'',p.set?p.set[1]:'',s.manual?'si':'no',p.eur,p.usd]);});
   const txt=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
   try{await navigator.clipboard.writeText(txt);toast('Album copiato negli appunti (CSV)');}catch(e){prompt('Copia il CSV:',txt);}};
+// ---- valore dell'album nel tempo: un punto ogni volta che il totale cambia (carte aggiunte/tolte, prezzi aggiornati)
+let hist=[],range=30;try{hist=JSON.parse(localStorage.getItem('hist')||'[]');range=+(localStorage.getItem('range')||30);}catch(e){}
+function snapshot(e){const last=hist[hist.length-1];if(last&&Math.abs(last[1]-e)<0.005)return;
+  hist.push([Date.now(),Math.round(e*100)/100]);if(hist.length>2000)hist=hist.filter((_,i)=>i%2===0||i===hist.length-1);
+  try{localStorage.setItem('hist',JSON.stringify(hist));}catch(e){}}
+function chart(e){const now=Date.now(),from=range?now-range*864e5:(hist[0]?Math.min(hist[0][0],now-864e5):now-864e5);
+  let pts=hist.filter(p=>p[0]>=from);const before=hist.filter(p=>p[0]<from).pop();
+  pts=[[from,before?before[1]:0],...pts,[now,e]];                   // prima del primo punto l'album valeva 0
+  const ys=pts.map(p=>p[1]),lo=Math.min(...ys),hi=Math.max(...ys);
+  const X=t=>(4+312*(t-from)/Math.max(1,now-from)).toFixed(1),Y=v=>(hi===lo?55:104-96*(v-lo)/(hi-lo)).toFixed(1);
+  let d='';pts.forEach((p,i)=>{d+=i?` L${X(p[0])} ${Y(pts[i-1][1])} L${X(p[0])} ${Y(p[1])}`:`M${X(p[0])} ${Y(p[1])}`;});   // a gradini: il valore resta fermo finche' non cambia
+  $('#chart').innerHTML=`<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00e5ff" stop-opacity=".35"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/></linearGradient></defs><path d="${d} L${X(now)} 110 L${X(pts[0][0])} 110 Z" fill="url(#g)"/><path d="${d}" fill="none" stroke="#00e5ff" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  const dl=e-pts[0][1],el=$('#pdelta');el.className=dl>0.005?'up':dl<-0.005?'down':'flat';
+  el.textContent=`${dl>=0?'+':''}${eur.format(dl)} ${range?'negli ultimi '+range+' giorni':'da quando usi l\'album'}`;}
+function mostValuable(){const rows=scans.map((s,i)=>({s,i,v:valueOf(s)})).filter(r=>r.v.p.c).sort((a,b)=>b.v.eur-a.v.eur).slice(0,5);
+  $('#mvlist').innerHTML=rows.length?rows.map(r=>`<div class="mvrow"><span>${esc(nm(r.v.p.c))}${r.v.p.set?' · '+esc(r.v.p.set[0])+' '+esc(r.v.p.set[1]):''}</span><b>${r.v.approx?'≈ ':''}${eur.format(r.v.eur)}</b></div>`).join(''):'<div class="mvrow"><span>Nessuna carta ancora</span></div>';}
+document.querySelectorAll('.ranges button').forEach(b=>{b.classList.toggle('on',+b.dataset.r===range);b.onclick=()=>{range=+b.dataset.r;try{localStorage.setItem('range',range);}catch(e){}
+  document.querySelectorAll('.ranges button').forEach(x=>x.classList.toggle('on',x===b));render();};});
 $('#helpbtn').onclick=()=>{$('#help').hidden=false;};
 $('#helpok').onclick=()=>{$('#help').hidden=true;try{localStorage.setItem('help1','1');}catch(e){}};
 
