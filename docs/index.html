@@ -73,7 +73,8 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}
 .ranges{display:flex;gap:4px;flex:none}
 .ranges button{background:transparent;border:1px solid rgba(0,229,255,.4);color:#bff8ff;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:700}
 .ranges button.on{background:var(--acc2);color:#08101a;border-color:var(--acc2)}
-#chart{display:block;width:100%;height:110px;margin:8px 0 4px}
+#chart{display:block;width:100%;height:120px;margin:8px 0 2px;overflow:visible}
+.chnote{color:rgba(143,230,247,.7);font-size:10px;margin:0 0 6px}
 #lsum{font-size:11px;color:#8fe6f7;margin:0 0 6px;line-height:1.35}
 .mv h4{margin:6px 0 2px;font:600 11px Consolas,"Courier New",monospace;color:#8fe6f7;letter-spacing:1px}
 .mvrow{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:4px 0;border-top:1px solid rgba(0,229,255,.15)}
@@ -148,6 +149,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <div class="port-top"><div><small>Valore dell'album</small><b id="pval">0,00 €</b><span id="pdelta" class="flat"></span></div>
       <div class="ranges"><button data-r="7">7G</button><button data-r="30" class="on">30G</button><button data-r="0">Tutto</button></div></div>
     <svg id="chart" viewBox="0 0 320 110" preserveAspectRatio="none" aria-label="andamento del valore dell'album"></svg>
+    <small class="chnote">curva levigata, un punto al giorno · i prezzi si aggiornano ogni lunedì, il valore sale quando aggiungi carte</small>
     <div id="lsum"></div>
     <div class="mv"><h4>LE PIÙ PREZIOSE</h4><div id="mvlist"></div></div>
   </div>
@@ -374,13 +376,22 @@ let hist=[],range=30;try{hist=JSON.parse(localStorage.getItem('hist')||'[]');ran
 function snapshot(e){const last=hist[hist.length-1];if(last&&Math.abs(last[1]-e)<0.005)return;
   hist.push([Date.now(),Math.round(e*100)/100]);if(hist.length>2000)hist=hist.filter((_,i)=>i%2===0||i===hist.length-1);
   try{localStorage.setItem('hist',JSON.stringify(hist));}catch(e){}}
-function chart(e){const now=Date.now(),from=range?now-range*864e5:(hist[0]?Math.min(hist[0][0],now-864e5):now-864e5);
-  let pts=hist.filter(p=>p[0]>=from);const before=hist.filter(p=>p[0]<from).pop();
-  pts=[[from,before?before[1]:0],...pts,[now,e]];                   // prima del primo punto l'album valeva 0
+function chart(e){const now=Date.now(),day=864e5,from=range?now-range*day:(hist[0]?Math.min(hist[0][0],now-day):now-day);
+  const at=t=>{let v=0;for(const p of hist){if(p[0]<=t)v=p[1];else break;}return v;};      // valore dell'album in un istante (0 prima del primo punto)
+  const n=Math.max(2,Math.min(60,Math.round((now-from)/day))),pts=[];                     // un punto al giorno (fino a 60 per "tutto")
+  for(let i=0;i<=n;i++){const t=from+(now-from)*i/n;pts.push([t,i===n?e:at(t)]);}
   const ys=pts.map(p=>p[1]),lo=Math.min(...ys),hi=Math.max(...ys);
-  const X=t=>(4+312*(t-from)/Math.max(1,now-from)).toFixed(1),Y=v=>(hi===lo?55:104-96*(v-lo)/(hi-lo)).toFixed(1);
-  let d='';pts.forEach((p,i)=>{d+=i?` L${X(p[0])} ${Y(pts[i-1][1])} L${X(p[0])} ${Y(p[1])}`:`M${X(p[0])} ${Y(p[1])}`;});   // a gradini: il valore resta fermo finche' non cambia
-  $('#chart').innerHTML=`<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00e5ff" stop-opacity=".35"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/></linearGradient></defs><path d="${d} L${X(now)} 110 L${X(pts[0][0])} 110 Z" fill="url(#g)"/><path d="${d}" fill="none" stroke="#00e5ff" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  const P=pts.map(p=>[4+312*(p[0]-from)/Math.max(1,now-from),hi===lo?55:104-96*(p[1]-lo)/(hi-lo)]);
+  const f=v=>Math.min(104,Math.max(4,v)).toFixed(1);
+  let d=`M${P[0][0].toFixed(1)} ${f(P[0][1])}`;                                           // curva levigata (Catmull-Rom -> Bezier)
+  for(let i=0;i<P.length-1;i++){const p0=P[i-1]||P[i],p1=P[i],p2=P[i+1],p3=P[i+2]||p2;
+    d+=` C${(p1[0]+(p2[0]-p0[0])/6).toFixed(1)} ${f(p1[1]+(p2[1]-p0[1])/6)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(1)} ${f(p2[1]-(p3[1]-p1[1])/6)} ${p2[0].toFixed(1)} ${f(p2[1])}`;}
+  const L=P[P.length-1];
+  $('#chart').innerHTML=`<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00e5ff" stop-opacity=".38"/><stop offset="1" stop-color="#ffb300" stop-opacity="0"/></linearGradient>
+    <linearGradient id="sg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#00e5ff"/><stop offset="1" stop-color="#ffb300"/></linearGradient>
+    <filter id="gl" x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <path d="${d} L${L[0].toFixed(1)} 110 L4 110 Z" fill="url(#g)"/><path d="${d}" fill="none" stroke="url(#sg)" stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke" filter="url(#gl)"/>
+    <circle cx="${L[0].toFixed(1)}" cy="${f(L[1])}" r="4" fill="#ffb300" filter="url(#gl)"/>`;
   const dl=e-pts[0][1],el=$('#pdelta');el.className=dl>0.005?'up':dl<-0.005?'down':'flat';
   el.textContent=`${dl>=0?'+':''}${eur.format(dl)} ${range?'negli ultimi '+range+' giorni':'da quando usi l\'album'}`;}
 function mostValuable(){const rows=scans.map((s,i)=>({s,i,v:valueOf(s)})).filter(r=>r.v.p.c).sort((a,b)=>b.v.eur-a.v.eur).slice(0,5);
