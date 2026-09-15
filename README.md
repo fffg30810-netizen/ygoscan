@@ -35,9 +35,14 @@ alla schermata Home. Tutto il riconoscimento gira sul telefono.
 3. **Prezzi per stampa in euro da Cardmarket.** `cardmarket.py` scarica ogni giorno il listino pubblico di
    Cardmarket (`price_guide_3.json` + `products_singles_3.json`, senza chiave API). Il listino non ha
    codici set né rarità: ogni espansione Cardmarket viene agganciata a un set del database confrontando gli
-   elenchi di nomi delle carte (774 espansioni, sovrapposizione mediana 90%), poi dentro il set le stampe
-   si abbinano ai prodotti: 1↔1 esatto, k↔k per rarità (rarità più alta = prezzo più alto), conteggi
-   diversi → intervallo. Copertura: 96% delle 44.517 stampe (66% esatto, 20% per rarità, 10% intervallo).
+   elenchi di nomi delle carte (anche più set per espansione: Cardmarket fonde i Duel Terminal negli Hidden
+   Arsenal e le edizioni OTS in una sola; nomi confrontati anche senza punteggiatura e caratteri invisibili),
+   poi dentro il set le stampe si abbinano ai prodotti: 1↔1 esatto, k↔k per rarità (rarità più alta =
+   prezzo più alto), conteggi diversi → intervallo; una stampa assente dal listino prende una stima dalle
+   stampe simili della stessa carta (stessa rarità o la più vicina), a meno che TCGplayer non abbia il prezzo
+   esatto di quella stampa. Copertura sulle 44.517 stampe: 68% esatto, 20% per rarità, 11% intervallo,
+   1% stima, 0,2% "set in uscita" (data futura da `cardsets.php`), 0,1% senza nulla (carte premio dei
+   campionati, che non hanno un mercato).
    L'app mostra il **trend Cardmarket** della stampa scelta (e "da X €" = minimo in vendita); dove Cardmarket
    non ha la stampa usa TCGplayer convertito col cambio del giorno (≈); la stampa di default è la più
    economica in euro (scelta prudente), si cambia con un tap e la lista è ordinata dalla più cara.
@@ -77,9 +82,9 @@ Con `?debug` nell'URL la barra di stato mostra le distanze del miglior candidato
   inquadrature vuote).
 - Foil con riflessi forti, carte in bustina scura, luce scarsa: il match può richiedere qualche
   istante o fallire; un supporto fisso come nel video (telefono fermo, carta sotto) è l'ideale.
-- Le stampe "per rarità" e "intervallo" sono abbinamenti euristici (il listino Cardmarket non etichetta le
-  rarità): l'app lo dice sempre nell'etichetta del prezzo. Il 5% delle stampe (promo rare, set che
-  Cardmarket cataloga con altro nome) resta senza Cardmarket e usa TCGplayer convertito o il minimo carta.
+- Le stampe "per rarità", "intervallo" e "stima da stampe simili" sono abbinamenti euristici (il listino
+  Cardmarket non etichetta le rarità): l'app lo dice sempre nell'etichetta del prezzo e mette "≈" davanti.
+  Le carte dei set non ancora usciti mostrano "set in uscita" invece di un numero inventato.
 - I dati si aggiornano rilanciando `build_db.py` (le immagini già scaricate non vengono riscaricate).
 
 ## Verifica

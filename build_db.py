@@ -118,6 +118,15 @@ def main():
         import cardmarket; cardmarket.enrich(cards)      # prezzi Cardmarket € per stampa (listino pubblico giornaliero)
     except Exception as e:
         print("Cardmarket non disponibile, si va avanti con TCGplayer:", e)
+    future = set()                                       # set con data di uscita futura: niente prezzo, ma l'app lo spiega
+    try:
+        cs = os.path.join(DATA, "cardsets.json")
+        if not os.path.exists(cs) or time.time() - os.path.getmtime(cs) > 86400:
+            json.dump(get(API.replace("cardinfo", "cardsets")), open(cs, "w", encoding="utf-8"))
+        today = time.strftime("%Y-%m-%d")
+        future = {s["set_name"] for s in json.load(open(cs, encoding="utf-8")) if (s.get("tcg_date") or "") > today}
+    except Exception as e:
+        print("elenco set non disponibile:", e)
     out, missing = [], 0
     for c in cards:
         imgs = []
@@ -129,14 +138,15 @@ def main():
         if not imgs: continue
         pr = (c.get("card_prices") or [{}])[0]
         sets = [[s["set_code"], s.get("set_rarity_code", "").strip("()") or s.get("set_rarity", ""), float(s.get("set_price") or 0)]
-                + ([round(s["cm_trend"], 2), round(s["cm_low"], 2), s["cm_flag"]] if "cm_trend" in s else [])
+                + ([round(s["cm_trend"], 2), round(s["cm_low"], 2), s["cm_flag"]] if "cm_trend" in s
+                   else ([0, 0, 5] if s["set_name"] in future else []))
                 for s in c.get("card_sets", [])]
         name_it = names_it.get(c["id"], "")
         out.append([c["id"], c["name"], c.get("humanReadableCardType", c.get("type", "")),
                     float(pr.get("cardmarket_price") or 0), float(pr.get("tcgplayer_price") or 0), sets, imgs,
                     name_it if name_it != c["name"] else "", c.get("attribute", "") or "", int(c.get("level") or c.get("linkval") or 0)])
     db = {"v": 4, "built": time.strftime("%Y-%m-%d"), "n": len(out),
-          "fields": "id,name,type,cardmarket_eur,tcgplayer_usd,sets[[code,rarity,usd,cm_trend_eur?,cm_low_eur?,cm_flag?(0 esatto,1 per rarita',2 intervallo)]],images[[id,dhash,phash,arthash]],name_it,attribute,level",
+          "fields": "id,name,type,cardmarket_eur,tcgplayer_usd,sets[[code,rarity,usd,cm_trend_eur?,cm_low_eur?,cm_flag?(0 esatto,1 per rarita',2 intervallo,3 stima da stampe simili,5 set in uscita)]],images[[id,dhash,phash,arthash]],name_it,attribute,level",
           "cards": out}
     json.dump(db, open(dst, "w", encoding="utf-8"), separators=(",", ":"), ensure_ascii=False)
     print(f"db.json: {len(out)} carte, {missing} immagini mancanti, {os.path.getsize(dst)/1e6:.1f} MB")

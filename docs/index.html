@@ -274,22 +274,26 @@ function typeColor(t){t=(t||'').toLowerCase();
   if(t.includes('synchro'))return'#f4f4f4';if(t.includes('fusion'))return'#b28dff';if(t.includes('ritual'))return'#7fc8ff';if(t.includes('token'))return'#9aa0a6';
   if(t.includes('normal'))return'#f0c95a';return'#ff9a3c';}                      // effetto e altri mostri: arancione
 function priceOf(it){const c=card(it);if(!c)return{eur:0,usd:0,cm:0,cmLow:0,flag:null,set:null,c:null};const set=c[5][it.si]||null;
-  return{eur:c[3],usd:set?set[2]:c[4],cm:set&&set[3]>0?set[3]:0,cmLow:set&&set[4]>0?set[4]:0,flag:set&&set[3]>0?set[5]:null,set,c};}
-const printEur=s=>s[3]>0?s[3]:(s[2]>0?s[2]*RATE:0);              // € di una stampa: Cardmarket trend, altrimenti TCGplayer convertito
+  return{eur:c[3],usd:set?set[2]:c[4],cm:set&&set[3]>0?set[3]:0,cmLow:set&&set[4]>0?set[4]:0,flag:set&&set.length>5?set[5]:null,set,c};}
+const useCm=s=>s[3]>0&&!(s[5]===3&&s[2]>0);                        // Cardmarket vale, tranne quando e' solo una stima e TCGplayer ha la stampa esatta
+const printEur=s=>useCm(s)?s[3]:(s[2]>0?s[2]*RATE:0);             // € di una stampa: Cardmarket trend, altrimenti TCGplayer convertito
+const printApprox=s=>!(useCm(s)&&s[5]<=1);
 let RATE=0.86,RATE_LIVE=false;                    // cambio $ -> €: valore stimato, poi aggiornato dal cambio del giorno (CDN gratis, con riserva)
 const gotRate=v=>{if(v>0&&v<3){RATE=v;RATE_LIVE=true;if(DB)render();}};
 fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json').then(r=>r.json()).then(j=>gotRate(j.usd.eur))
   .catch(()=>fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR').then(r=>r.json()).then(j=>gotRate(j.rates.EUR)).catch(()=>{}));
 function valueOf(it){const p=priceOf(it);                        // €: Cardmarket trend della stampa; senza -> TCGplayer convertito; senza -> minimo della carta
-  if(p.cm>0)return{eur:p.cm,approx:p.flag===2,src:p.flag===2?'range':p.flag===1?'rar':'cm',usd:p.usd,p};
+  if(p.cm>0&&!(p.flag===3&&p.usd>0))return{eur:p.cm,approx:p.flag>=2,src:['cm','rar','range','est'][p.flag]||'cm',usd:p.usd,p};
   if(p.usd>0)return{eur:p.usd*RATE,approx:true,src:'tcg',usd:p.usd,p};
-  return{eur:p.eur,approx:false,src:'min',usd:0,p};}
-const SRC={cm:'Cardmarket · trend',rar:'Cardmarket · abbinata per rarità',range:'Cardmarket · intervallo tra varianti',tcg:'TCGplayer convertito in €',min:'prezzo minimo della carta'};
+  return{eur:p.eur,approx:false,src:p.flag===5?'soon':'min',usd:0,p};}
+const SRC={cm:'Cardmarket · trend',rar:'Cardmarket · abbinata per rarità',range:'Cardmarket · intervallo tra varianti',est:'Cardmarket · stima da stampe simili',tcg:'TCGplayer convertito in €',min:'prezzo minimo della carta',soon:'set in uscita · nessun prezzo ancora'};
 function detail(v,p){const lo=p.cmLow>0?', da '+eur.format(p.cmLow):'',tc=p.usd>0?' · TCGplayer '+usd.format(p.usd):'';
   return v.src==='cm'?`Cardmarket ${eur.format(p.cm)} (trend${lo})${tc}`
     :v.src==='rar'?`Cardmarket ${eur.format(p.cm)} (trend${lo}; abbinata per rarità, perché il listino non etichetta le rarità)${tc}`
     :v.src==='range'?`Cardmarket tra ${eur.format(p.cmLow)} e ${eur.format(p.cm)} (più varianti nello stesso set)${tc}`
+    :v.src==='est'?`stima ${eur.format(p.cm)}: questa stampa non è nel listino Cardmarket, il valore viene dalle stampe simili della stessa carta (da ${eur.format(p.cmLow)})`
     :v.src==='tcg'?`TCGplayer ${usd.format(p.usd)} ≈ ${eur.format(v.eur)} (${rateNote()}); Cardmarket non ha questa stampa`
+    :v.src==='soon'?`il set non è ancora uscito: nessun mercato, nessun prezzo. La carta parte da ${p.c&&p.c[3]>0?eur.format(p.c[3]):'n.d.'} nelle altre stampe`
     :`nessun prezzo per questa stampa; la carta parte da ${p.c&&p.c[3]>0?eur.format(p.c[3]):'n.d.'}`;}
 const rateNote=()=>`cambio ${RATE.toFixed(2)} €/$ ${RATE_LIVE?'di oggi':'stimato'}`;
 function artOf(it){const c=card(it);if(!c||c[6].length<2)return'';const k=c[6].findIndex(im=>im[0]===it.img);return k<0?`${c[6].length} illustrazioni`:`Illustrazione ${k+1} di ${c[6].length}`;}
@@ -329,8 +333,8 @@ function render(){const n=scans.length;$('#organize').textContent=`Organizza (${
     +('<div class="pocket empty"><div class="noimg">'+(pg.length?'':'vuoto: torna allo scanner o usa "Aggiungi per nome"')+'</div></div>').repeat(9-pg.length)}</div></div>`).join('');}
 function openPick(i){const it=scans[i],c=card(it);if(!c)return;const d=$('#pick');
   const art=artOf(it),v=valueOf(it),dl=it.v0!=null?v.eur-it.v0:0;
-  d.innerHTML=`<div class="ph"><div><b>${esc(nm(c))}</b><small>${en(c)?esc(en(c))+' · ':''}${esc(typeIt(c[2]))} · la carta parte da ${c[3]>0?eur.format(c[3]):'n.d.'} (stampa più economica)${art?'<br>'+esc(art)+' (il database non dice quale stampa usa quale disegno: le stampe elencate valgono per tutte)':''}${it.v0!=null?`<br>Valore alla scansione ${eur.format(it.v0)} → oggi ${v.approx?'≈ ':''}${eur.format(v.eur)} <b class="${dl>0.005?'up':dl<-0.005?'down':'flat'}">(${dl>=0?'+':''}${eur.format(dl)})</b>`:''}<br>Scegli la stampa: codice set · rarità · prezzo Cardmarket in € (≈ = intervallo tra varianti o convertito da TCGplayer), dalla più cara</small></div>${it.thumb?`<img src="${it.thumb}" alt="">`:''}</div>
-  <div class="sets">${[...c[5].keys()].sort((a,b)=>printEur(c[5][b])-printEur(c[5][a])).map(k=>{const s=c[5][k],e=printEur(s);return`<button class="set${k===it.si?' on':''}" data-k="${k}"><span>${esc(s[0])}</span><em>${esc(s[1])}${s[2]>0?' · '+usd.format(s[2]):''}</em><b>${e>0?((s[3]>0?s[5]===2:true)?'≈ ':'')+eur.format(e):'—'}</b></button>`;}).join('')||'<p style="padding:0 8px">Nessuna stampa nota per questa carta.</p>'}</div>
+  d.innerHTML=`<div class="ph"><div><b>${esc(nm(c))}</b><small>${en(c)?esc(en(c))+' · ':''}${esc(typeIt(c[2]))} · la carta parte da ${c[3]>0?eur.format(c[3]):'n.d.'} (stampa più economica)${art?'<br>'+esc(art)+' (il database non dice quale stampa usa quale disegno: le stampe elencate valgono per tutte)':''}${it.v0!=null?`<br>Valore alla scansione ${eur.format(it.v0)} → oggi ${v.approx?'≈ ':''}${eur.format(v.eur)} <b class="${dl>0.005?'up':dl<-0.005?'down':'flat'}">(${dl>=0?'+':''}${eur.format(dl)})</b>`:''}<br>Scegli la stampa: codice set · rarità · prezzo Cardmarket in € (≈ = intervallo, stima da stampe simili o convertito da TCGplayer), dalla più cara</small></div>${it.thumb?`<img src="${it.thumb}" alt="">`:''}</div>
+  <div class="sets">${[...c[5].keys()].sort((a,b)=>printEur(c[5][b])-printEur(c[5][a])).map(k=>{const s=c[5][k],e=printEur(s);return`<button class="set${k===it.si?' on':''}" data-k="${k}"><span>${esc(s[0])}</span><em>${esc(s[1])}${s[2]>0?' · '+usd.format(s[2]):''}</em><b>${e>0?(printApprox(s)?'≈ ':'')+eur.format(e):(s[5]===5?'in uscita':'—')}</b></button>`;}).join('')||'<p style="padding:0 8px">Nessuna stampa nota per questa carta.</p>'}</div>
   <div class="pf"><button class="pill dark" id="rm">Togli dall'album</button><button class="pill acc" id="ok">Chiudi</button></div>`;
   d.querySelectorAll('.set').forEach(b=>b.onclick=()=>{it.si=+b.dataset.k;it.manual=true;it.v0=Math.round(valueOf(it).eur*100)/100;save();render();if(i===scans.length-1)showCard(i);   // nuova base: il cambio stampa non e' un movimento di prezzo
     const s=c[5][it.si],vv=valueOf(it);toast(`Stampa impostata: ${s[0]} ${s[1]} · ${vv.eur>0?(vv.approx?'≈ ':'')+eur.format(vv.eur)+' ('+SRC[vv.src]+')':'prezzo non disponibile'}`);d.close();});
@@ -428,6 +432,7 @@ async function loadDB(){status('Carico il database delle carte (solo la prima vo
   try{await loadDB();}catch(e){status('Errore nel caricare il database: '+e.message);return;}
   let rb=false;scans.forEach(s=>{if(s.pv!==2){const c=card(s);if(c&&!s.manual){let si=-1,b=1e9;c[5].forEach((x,i)=>{const w=printEur(x);if(w>0&&w<b){b=w;si=i;}});if(si>=0)s.si=si;}
     s.v0=Math.round(valueOf(s).eur*100)/100;s.pv=2;rb=true;}});     // scansioni fatte prima dei prezzi Cardmarket: stampa piu' economica e base ricalcolate una volta
+  scans.forEach(s=>{const c=card(s);if(c&&!s.manual&&c[5][s.si]&&c[5][s.si][5]===5){let si=-1,b=1e9;c[5].forEach((x,i)=>{const w=printEur(x);if(w>0&&w<b){b=w;si=i;}});if(si>=0){s.si=si;rb=true;}}});   // default mai su un set non ancora uscito
   if(rb)save();render();if(scans.length)showCard(scans.length-1);   // con il db caricato: totali, album e ultima carta
   if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)startCam();else status('Questo browser non supporta la camera. Usa "Foto".');
   if('serviceWorker'in navigator&&!DEBUG)navigator.serviceWorker.register('sw.js').catch(()=>{});})();
