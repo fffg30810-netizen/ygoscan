@@ -32,9 +32,15 @@ alla schermata Home. Tutto il riconoscimento gira sul telefono.
    margine sul secondo ≥ 6 bit, e la stessa carta vince su 2 frame consecutivi. Poi resta "bloccato"
    finché la carta non esce dal riquadro (3 frame senza match), così una carta non viene contata due volte.
    Ad ogni carta contata suona una "monetina" (sintetizzata con Web Audio, pulsante "Suono" per spegnerla).
-3. Il prezzo mostrato è il **minimo Cardmarket della carta** (livello carta, non stampa: l'API Cardmarket
-   non è aperta). Per ogni stampa è disponibile il prezzo **TCGplayer in $**: la stampa di default è
-   la più economica (di solito la comune, scelta prudente), si cambia con un tap.
+3. **Prezzi per stampa in euro da Cardmarket.** `cardmarket.py` scarica ogni giorno il listino pubblico di
+   Cardmarket (`price_guide_3.json` + `products_singles_3.json`, senza chiave API). Il listino non ha
+   codici set né rarità: ogni espansione Cardmarket viene agganciata a un set del database confrontando gli
+   elenchi di nomi delle carte (774 espansioni, sovrapposizione mediana 90%), poi dentro il set le stampe
+   si abbinano ai prodotti: 1↔1 esatto, k↔k per rarità (rarità più alta = prezzo più alto), conteggi
+   diversi → intervallo. Copertura: 96% delle 44.517 stampe (66% esatto, 20% per rarità, 10% intervallo).
+   L'app mostra il **trend Cardmarket** della stampa scelta (e "da X €" = minimo in vendita); dove Cardmarket
+   non ha la stampa usa TCGplayer convertito col cambio del giorno (≈); la stampa di default è la più
+   economica in euro (scelta prudente), si cambia con un tap e la lista è ordinata dalla più cara.
 
 ## Avvio
 
@@ -71,12 +77,16 @@ Con `?debug` nell'URL la barra di stato mostra le distanze del miglior candidato
   inquadrature vuote).
 - Foil con riflessi forti, carte in bustina scura, luce scarsa: il match può richiedere qualche
   istante o fallire; un supporto fisso come nel video (telefono fermo, carta sotto) è l'ideale.
-- Prezzo Cardmarket = minimo tra tutte le stampe; TCGplayer per stampa in $. Nessuna conversione.
+- Le stampe "per rarità" e "intervallo" sono abbinamenti euristici (il listino Cardmarket non etichetta le
+  rarità): l'app lo dice sempre nell'etichetta del prezzo. Il 5% delle stampe (promo rare, set che
+  Cardmarket cataloga con altro nome) resta senza Cardmarket e usa TCGplayer convertito o il minimo carta.
 - I dati si aggiornano rilanciando `build_db.py` (le immagini già scaricate non vengono riscaricate).
 
 ## Verifica
 
 - `python build_db.py --selftest` — gli hash sono stabili e distinguono immagini diverse.
+- `python cardmarket.py --selftest` — l'abbinamento per rarità e la normalizzazione dei nomi; `python cardmarket.py`
+  stampa la copertura del listino sul database locale.
 - `python test_match.py` — simulazione camera (posa, prospettiva, riflessi, luce, sfocatura, rumore, jpeg).
 - Parità Python ↔ JS: `data/test/expected.json` contiene i risultati Python sulle foto di prova;
   nel browser `ygo.scanStill('/data/test/photo_0.jpg')` deve dare la stessa carta e distanze simili.
